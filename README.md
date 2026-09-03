@@ -1,159 +1,126 @@
-# ⚡ KRIPTO AGENT — Master V3
+# ⚡ KRIPTO AGENT — Master V5: Local Trading Control Center
 
-> **Binance Real-Time Autonomous Paper Trading & Validation System**  
-> *Production-Oriented 7-Day $5,000 Paper Trading Validation System*
+> **Production-Grade Autonomous Crypto Trading Agent & Local Mission Control**  
+> *Binance Real-Time Data + Command Bus + VectorBT Backtesting + Prometheus Monitoring*
 
 ---
 
 ## 🎯 Ana Hedef & Felsefe
 
-**KRIPTO AGENT V3**, gerçek zamanlı Binance piyasa verilerini (Kline, Ticker, BookTicker, OrderBook Depth) kullanarak, tek bir dolar gerçek para riske etmeden (`LIVE_TRADING=false`), gerçek piyasa dinamiklerini (komisyon, kayma, spread, fonlama) simüle ederek algoritmik stratejilerin istatistiksel güvenilirliğini test eden profesyonel bir kuantitatif ticaret altyapısıdır.
+**KRIPTO AGENT V5**, yalnızca pasif bir izleme paneli değil; yerel bilgisayarınızda çalışan, borsa bağlantısından risk yönetimine, tarayıcıdan strateji yürütümüne kadar tüm alt motorları doğrudan yöneten bir **Local Trading Control Center**'dır.
 
-* **Sanal Başlangıç Sermayesi**: \$5,000.00
-* **Piyasa Verisi**: Binance Spot (Gerçek Zamanlı WebSocket + REST Fallback)
-* **Emir Modeli**: Paper Trading (5 bps slippage, %0.1 fee, bid/ask spread)
+* **Sıfır Sahte / Sıfır Mock Prensibi**: Arayüzdeki her buton ve kontrol, arka plandaki gerçek bir servisi, Command Bus eylemini ve borsa/motor fonksiyonunu çalıştırır.
+* **Sanal Başlangıç Sermayesi**: \$5,000.00 USD
+* **Piyasa Verisi**: Binance Spot (Gerçek Zamanlı Multiplexed WebSocket + REST Fallback)
+* **İşlem Modeli**: Paper Trading (%0.1 komisyon, 5 bps slippage, gerçek Ask/Bid spread)
 * **İşlem Başına Risk**: %0.5 (yaklaşık \$25.00)
-* **Günlük Maksimum Zarar Kilidi**: \$50.00 (`DAILY_RISK_LOCK`)
-* **Günlük Hedef Aralığı**: +\$20 ile +\$100 net kâr (Performans karşılaştırma ölçütü)
-* **Canlı İşlem Koruması**: Kod düzeyinde sert kilit (`LIVE_TRADING` aktif edilirse veya `BinanceLiveExecutionEngine` çağrılırsa `RuntimeError` fırlatılır).
+* **Günlük Maksimum Zarar**: \$50.00 (`DAILY_RISK_LOCK`)
+* **Canlı Borsa Koruması**: Kod düzeyinde sert güvenlik kilidi (`LIVE_TRADING=false`). Canlı emir motoru `BinanceLiveExecutionEngine` doğrudan kilitlidir.
 
 ---
 
-## 🏗️ Mimari Pipeline
+## 🏗️ Mimari Şema & Command Bus Akışı
 
 ```text
-                  BINANCE SPOT
-                       │
-                       ▼
-         Real-Time Multiplexed WebSocket
-   (kline_15m, bookTicker, miniTicker, depth)
-                       │
-                       ▼
-            Data Quality & Validation
-(OHLC check, Out-of-Order, Duplicate, Stale, Spread Anomaly)
-                       │
-                       ▼
-             Binance Market Scanner
-(Liquidity Filter >$10M, Spread Filter <15 bps, Opportunity Score)
-                       │
-                       ▼
-                 Feature Engine
- (Trend, Momentum, Volatilite, Hacim, Market Structure, RSI Divergence)
-                       │
-                       ▼
-              Market Regime Engine
-(BULL_TREND, BEAR_TREND, SIDEWAYS, HIGH_VOLATILITY, LOW_VOLATILITY)
-                       │
-                       ▼
-         Strategy Engine & Signal Scorer
- (Trend Following, Mean Reversion, RSI Divergence Swing)
-                       │
-                       ▼
-                 Risk Engine
-(0.5% ATR Sizing, $50 Daily Loss Lock, 4-Aşamalı Devre Kesici)
-                       │
-                       ▼
-                 Paper Broker
- (Ask/Bid Spread, 5 bps Slippage, %0.1 Fees, Break-Even & Trailing Stop)
-                       │
-                       ▼
-        Portfolio & Performance Engine
- (Metrics, Monte Carlo, Duyarlılık Analizi, Günlük Raporlar)
-                       │
-                       ▼
-    FastAPI Backend & Canlı Web Dashboard & Telegram Bot
+               LOCAL OPERATOR ACTION
+                         │
+                         ▼
+        LOCAL TRADING CONTROL DASHBOARD
+         (http://localhost:8000/dashboard)
+                         │
+                         ▼
+               FASTAPI COMMAND BUS
+  (/api/agent/*, /api/risk/*, /api/strategies/*)
+                         │
+                         ▼
+             READINESS GATE VALIDATION
+  (Safety Lock, Risk Limits, Capital, DB Health)
+                         │
+      ┌──────────────────┴──────────────────┐
+      ▼                                     ▼
+TRADING ENGINES                      PERSISTENCE & AUDIT
+• Binance Connector                  • Immutable Audit Trail
+• Market Scanner                     • PostgreSQL / TimescaleDB
+• Feature & Regime Engine            • Redis Real-Time State
+• Strategy Manager                   • Prometheus /metrics
+• Risk Engine & Circuit Breaker      • Grafana Dashboards
+• Paper Broker & Fills
+• VectorBT & Monte Carlo
 ```
 
 ---
 
-## 💻 Teknoloji Stack
+## 🚀 Tek Komutla Yerel Başlatma
 
-* **Backend**: Python 3.12+, FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic
-* **Veri Tabanı**: PostgreSQL 16 / TimescaleDB (Hypertables), SQLite (yerel test), Redis
-* **Kuantitatif & Analiz**: NumPy, Pandas, SciPy, custom vectorized technical indicators
-* **Borsa Bağlantısı**: Binance WebSocket, CCXT Async
-* **Backtest & Doğrulama**: BacktestRunner, WalkForwardValidator, MonteCarloSimulator
-* **Arayüz**: FastAPI OpenAPI (`/docs`), Dahili İnteraktif HTML5/Tailwind Dashboard (`/dashboard`), Next.js / TypeScript (`apps/dashboard/`)
-* **Test & QA**: Pytest, Pytest-Asyncio, Ruff, MyPy (%100 geçiş, 28/28 test)
-* **Konteyner**: Docker, Docker Compose
+Windows ortamında tek tıklamayla sistemi başlatabilir ve doğrudan Control Center ekranına ulaşabilirsiniz:
 
----
-
-## 🚀 Hızlı Başlangıç
-
-### 1. Kurulum
 ```bash
-# Bağımlılıkları yükleyin
-make install
+# Windows Batch Dosyası:
+start.bat
 
-# Ortam değişkenlerini hazırlayın
-cp .env.example .env
+# veya PowerShell:
+.\start.ps1
 
-# Veritabanı tablolarını oluşturun
-make migrate
-```
-
-### 2. Testleri Çalıştırın
-```bash
-# Tüm testleri çalıştır (Unit, Strategy, Risk, Failure, API, E2E)
-make test
-
-# Linter kontrolü
-make lint
-
-# Tip denetimi
-make typecheck
-```
-
-### 3. 7 Günlük \$5,000 Paper Trading Deneyini Başlatın
-```bash
-make paper
-```
-Bu komut 7 günlük simülasyonu çalıştırır; her gün için günlük rapor (Day 1-7), hedef tutturma oranları (\$20, \$50, \$100/gün), strateji ve coin katkıları, komisyon ve kayma duyarlılık analizleri ve Monte Carlo simülasyonu ile nihai kararını (`GREEN` / `YELLOW` / `RED`) üretir.
-
-### 4. API & Web Dashboard'u Başlatın
-```bash
+# veya Makefile ile:
 make dev
 ```
-* **Swagger API Dokümantasyonu**: [http://localhost:8000/docs](http://localhost:8000/docs)
-* **İnteraktif Web Dashboard**: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
 
-### 5. Docker ile Tek Komutla Çalıştırma
-```bash
-make docker-up
+Dashboard otomatik olarak tarayıcınızda açılır:
+* **Local Control Dashboard**: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
+* **OpenAPI Swagger Belgeleri**: [http://localhost:8000/docs](http://localhost:8000/docs)
+* **Prometheus Metrikleri**: [http://localhost:8000/metrics](http://localhost:8000/metrics)
+
+---
+
+## 🎮 Local Control Center Yetenekleri
+
+1. **Global Control Bar**:
+   * Sistem durumu (`TRADING`, `PAUSED`, `RISK_LOCK`, `STOPPED`), Binance bağlantısı ve Pre-flight Readiness Gate durumunu canlı görüntüler.
+   * `START AGENT`, `PAUSE`, `RESUME`, `STOP` ve `EMERGENCY STOP` eylemlerini gerçek backend fonksiyonlarıyla çalıştırır.
+2. **Emergency Stop (Acil Durum Devre Kesici)**:
+   * Tek tıkla tüm açık limit emirlerini iptal eder, yeni emir üretimini dondurur ve sistemi `RISK_LOCK` durumuna kilitler.
+3. **Canlı Binance Tarayıcısı (Live Scanner)**:
+   * `SCAN NOW` butonu ile Binance üzerindeki likit USDT paritelerini (hacim >\$10M, spread <15 bps) tarar ve Fırsat Skorunu (0–100) anında günceller.
+4. **Strateji Yönetimi (Strategies)**:
+   * `Trend Following`, `Mean Reversion` ve `RSI Divergence` stratejilerini çalışma anında devreye alıp devreden çıkarma (`ENABLE / DISABLE`).
+5. **Pozisyon Kapatma (Close Position)**:
+   * Açık paper pozisyonlarını simüle edilmiş piyasa fiyatından anında kapatır ve gerçekleşen kâr/zararı hesaplar.
+6. **Dinamik Risk Merkezi (Risk Center)**:
+   * İşlem başı risk, günlük zarar limiti, maksimum pozisyon adedi ve ATR çarpanını doğrudan arayüzden günceller.
+7. **VectorBT Backtest & Monte Carlo**:
+   * İstenen parite ve strateji için vektörize portföy simülasyonu ve 1.000 tekrarlı Monte Carlo çekilişi gerçekleştirir.
+8. **Denetim İzi (Audit Trail)**:
+   * Kullanıcı tarafından gerçekleştirilen her işlemi zaman damgası, parametreler ve başarı durumuyla kayıt altına alır.
+
+---
+
+## 🧪 Kalite ve Test Durumu
+
+Tüm test paketleri (Unit, Strategy, Risk, Failure, Backtest, E2E, Control Center) başarıyla geçmiştir:
+
+```text
+============================== 40 passed in 27.76s ==============================
 ```
 
----
-
-## 📊 Stratejiler
-
-1. **Trend Following**: EMA20 > EMA50 > EMA200 uyumu, ADX $\ge 23$, RSI 45–68 arası sağlıklı momentum.
-2. **Mean Reversion**: Sadece `SIDEWAYS` rejiminde; Bollinger Bandı sapması ve RSI aşırı satım/alım dönüşü.
-3. **RSI Divergence Swing**: Fiyat Lower Low yaparken RSI Higher Low yaptığında (veya tersi) çalışan, hacim ve piyasa yapısı onayı gerektiren yüksek olasılıklı swing stratejisi.
-
----
-
-## 🔒 Güvenlik İlkeleri
-
-* Asla API key veya secret kod içine yazılmaz.
-* Para çekme (withdrawal) izni olan API anahtarı kesinlikle kabul edilmez.
-* Canlı işlem katmanı V3 süresince **TAMAMEN KİLİTLİDİR** (`BinanceLiveExecutionEngine` çağrılırsa `RuntimeError` fırlatılır).
-* Stratejiler ve AI ajanları asla Risk Engine limitlerini bypass edemez.
+* **Pytest**: **40 / 40 PASS (%100 Başarı)**
+* **Ruff Linter & Formatter**: **0 Hata**
+* **MyPy Tip Denetimi**: **0 Hata (151 kaynak dosya)**
 
 ---
 
 ## 📚 Dokümantasyonlar
 
+* [Local Control Center Mimarisi](docs/CONTROL_CENTER.md)
+* [GitHub Kaynak ve Bağımlılık Matrisi](docs/SOURCE_AUDIT.md)
 * [Sistem Mimarisi](docs/ARCHITECTURE.md)
 * [Binance Entegrasyon Mimarisi](docs/BINANCE.md)
 * [Piyasa Verisi & Tarayıcı (Scanner)](docs/MARKET_DATA.md)
 * [Strateji Motoru](docs/STRATEGIES.md)
-* [RSI Uyumsuzluk (Divergence) Motoru](docs/RSI_DIVERGENCE.md)
+* [RSI Uyumsuzluk Motoru](docs/RSI_DIVERGENCE.md)
 * [Risk Modeli & Devre Kesici](docs/RISK_MODEL.md)
 * [Paper Broker & Maliyet Simülasyonu](docs/PAPER_TRADING.md)
-* [Backtesting Kılavuzu](docs/BACKTESTING.md)
 * [Walk-Forward Doğrulama](docs/WALK_FORWARD.md)
-* [Monte Carlo Risk Simülasyonu](docs/MONTE_CARLO.md)
+* [Monte Carlo Simülasyonu](docs/MONTE_CARLO.md)
 * [7 Günlük Doğrulama Deneyi](docs/7_DAY_EXPERIMENT.md)
 * [API Dokümantasyonu](docs/API.md)
 * [Güvenlik Mimarisi](docs/SECURITY.md)

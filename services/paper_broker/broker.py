@@ -185,3 +185,34 @@ class PaperBroker:
                 return closed_pos, hit_reason, exit_price
 
         return None
+
+    @property
+    def open_positions(self) -> Dict[str, Position]:
+        return {
+            k: v for k, v in self.portfolio.positions.items() if v.status == PositionStatus.OPEN
+        }
+
+    @property
+    def open_orders(self) -> Dict[str, Order]:
+        return {k: v for k, v in self.orders.items() if v.status == OrderStatus.OPEN}
+
+    def close_position(
+        self, symbol: str, exit_price: float, reason: str = "MANUAL"
+    ) -> Optional[Position]:
+        if symbol not in self.portfolio.positions:
+            return None
+        pos = self.portfolio.positions[symbol]
+        fee = calculate_fee(exit_price, pos.quantity, self.taker_fee)
+        closed_pos = self.portfolio.close_position(symbol, exit_price, fee)
+        if closed_pos:
+            self.closed_positions_history.append(closed_pos)
+            logger.info(
+                f"Manual Paper Position CLOSED [{reason}]: {symbol} Net PnL: ${closed_pos.realized_pnl:+.2f}"
+            )
+        return closed_pos
+
+    def cancel_order(self, order_id: str) -> bool:
+        if order_id in self.orders:
+            self.orders[order_id].status = OrderStatus.CANCELLED
+            return True
+        return False

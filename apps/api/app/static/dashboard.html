@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KRIPTO AGENT — 7-Day $5,000 Paper Trading Validation System</title>
+    <title>KRIPTO AGENT — Local Trading Control Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -11,11 +11,11 @@
             theme: {
                 extend: {
                     colors: {
-                        darkBg: '#0b0e14',
-                        cardBg: '#151a23',
-                        cardBorder: '#232b3b',
-                        accentGreen: '#00dc82',
-                        accentRed: '#ff4d4d',
+                        darkBg: '#090d16',
+                        panelBg: '#111726',
+                        panelBorder: '#1e293b',
+                        accentGreen: '#10b981',
+                        accentRed: '#ef4444',
                         accentBlue: '#3b82f6',
                         accentYellow: '#f59e0b',
                     }
@@ -24,401 +24,729 @@
         }
     </script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0b0e14; color: #f3f4f6; }
-        .glass-panel { background: #151a23; border: 1px solid #232b3b; border-radius: 12px; }
-        .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+        body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #090d16; color: #f1f5f9; }
+        .glass-card { background: #111726; border: 1px solid #1e293b; border-radius: 10px; }
+        .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+        .btn { padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; transition: all 0.2s; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-green { background: #059669; color: white; }
+        .btn-green:hover { background: #10b981; }
+        .btn-yellow { background: #d97706; color: white; }
+        .btn-yellow:hover { background: #f59e0b; }
+        .btn-red { background: #dc2626; color: white; }
+        .btn-red:hover { background: #ef4444; }
+        .btn-blue { background: #2563eb; color: white; }
+        .btn-blue:hover { background: #3b82f6; }
+        .btn-gray { background: #334155; color: white; }
+        .btn-gray:hover { background: #475569; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
-    <!-- Top Navigation Bar -->
-    <header class="border-b border-cardBorder bg-cardBg px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+    <!-- GLOBAL CONTROL BAR -->
+    <header class="border-b border-panelBorder bg-panelBg px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50">
         <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-lg bg-emerald-500/20 text-accentGreen flex items-center justify-center font-bold text-xl">
+            <div class="w-10 h-10 rounded-lg bg-emerald-500/20 text-accentGreen flex items-center justify-center font-bold text-xl border border-emerald-500/30">
                 ⚡
             </div>
             <div>
-                <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                <h1 class="text-base font-bold text-white flex items-center gap-2">
                     KRIPTO AGENT
-                    <span class="badge bg-amber-500/20 text-accentYellow border border-amber-500/30">V2 VALIDATION</span>
+                    <span class="badge bg-emerald-500/20 text-accentGreen border border-emerald-500/30">CONTROL CENTER</span>
                     <span class="badge bg-blue-500/20 text-accentBlue border border-blue-500/30">PAPER TRADING ONLY</span>
                 </h1>
-                <p class="text-xs text-gray-400">7-Day $5,000 Autonomous Algorithmic Crypto Validation System</p>
+                <p class="text-xs text-gray-400">Binance Real-Time Data • 100% Functional Local Architecture</p>
             </div>
         </div>
-        <div class="flex items-center gap-4">
-            <div class="flex items-center gap-2 text-xs text-gray-300 bg-darkBg px-3 py-1.5 rounded-lg border border-cardBorder">
-                <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>SYSTEM: <b id="sys-status" class="text-emerald-400">NORMAL</b></span>
+
+        <!-- Global Status Indicators -->
+        <div class="flex items-center gap-2 text-xs">
+            <div class="bg-darkBg px-3 py-1.5 rounded-lg border border-panelBorder flex items-center gap-2">
+                <span id="dot-state" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span>SYSTEM: <b id="lbl-state" class="text-emerald-400">TRADING</b></span>
             </div>
-            <div class="text-xs text-gray-400 font-mono" id="clock">00:00:00 UTC</div>
+            <div class="bg-darkBg px-3 py-1.5 rounded-lg border border-panelBorder flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span>BINANCE: <b class="text-emerald-400">CONNECTED</b></span>
+            </div>
+            <div class="bg-darkBg px-3 py-1.5 rounded-lg border border-panelBorder flex items-center gap-2">
+                <span id="dot-gate" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span>GATE: <b id="lbl-gate" class="text-emerald-400">READY</b></span>
+            </div>
+        </div>
+
+        <!-- Real Command Actions -->
+        <div class="flex items-center gap-2">
+            <button onclick="dispatchAction('/api/agent/start', 'START_AGENT')" class="btn btn-green">
+                ▶ Start Agent
+            </button>
+            <button onclick="dispatchAction('/api/agent/pause', 'PAUSE_AGENT')" class="btn btn-yellow">
+                ⏸ Pause
+            </button>
+            <button onclick="dispatchAction('/api/agent/resume', 'RESUME_AGENT')" class="btn btn-blue">
+                ⏯ Resume
+            </button>
+            <button onclick="dispatchAction('/api/agent/stop', 'STOP_AGENT')" class="btn btn-gray">
+                ⏹ Stop
+            </button>
+            <button onclick="dispatchAction('/api/agent/emergency-stop', 'EMERGENCY_STOP')" class="btn btn-red animate-pulse">
+                🚨 Emergency Stop
+            </button>
         </div>
     </header>
 
-    <!-- Main Container -->
-    <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
-
-        <!-- Top Metrics Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Starting Capital -->
-            <div class="glass-panel p-5">
-                <div class="text-xs uppercase text-gray-400 font-semibold tracking-wider">Initial Capital</div>
-                <div class="text-2xl font-bold mt-1 text-white" id="initial-cap">$5,000.00</div>
-                <div class="text-xs text-gray-400 mt-2 flex justify-between">
-                    <span>Target: <b>$20 - $100/day</b></span>
-                    <span>Leverage: <b>1x Spot</b></span>
-                </div>
-            </div>
-
-            <!-- Current Equity -->
-            <div class="glass-panel p-5">
-                <div class="text-xs uppercase text-gray-400 font-semibold tracking-wider">Account Equity</div>
-                <div class="text-2xl font-bold mt-1 text-emerald-400" id="equity">$5,037.10</div>
-                <div class="text-xs text-gray-400 mt-2 flex justify-between">
-                    <span>Balance: <b id="balance">$5,000.00</b></span>
-                    <span>Unrealized: <b id="unrealized" class="text-emerald-400">+$37.10</b></span>
-                </div>
-            </div>
-
-            <!-- Today's PnL -->
-            <div class="glass-panel p-5">
-                <div class="text-xs uppercase text-gray-400 font-semibold tracking-wider">Today's Net PnL</div>
-                <div class="text-2xl font-bold mt-1 text-accentGreen" id="daily-pnl">+$37.10</div>
-                <div class="text-xs text-gray-400 mt-2 flex justify-between">
-                    <span>Daily Max Loss: <b>-$50.00</b></span>
-                    <span class="text-emerald-400">Target Hit: <b>+$20 ✅</b></span>
-                </div>
-            </div>
-
-            <!-- Max Drawdown -->
-            <div class="glass-panel p-5">
-                <div class="text-xs uppercase text-gray-400 font-semibold tracking-wider">Max Drawdown</div>
-                <div class="text-2xl font-bold mt-1 text-white" id="drawdown">0.36%</div>
-                <div class="text-xs text-gray-400 mt-2 flex justify-between">
-                    <span>Circuit Limit: <b>10.0%</b></span>
-                    <span class="text-emerald-400 font-semibold">SAFE</span>
-                </div>
-            </div>
+    <!-- ACTION FEEDBACK ALERT BANNER -->
+    <div id="action-banner" class="hidden px-6 py-2.5 text-xs font-semibold border-b transition-all duration-300">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <span id="action-banner-msg">Action result</span>
+            <button onclick="closeActionBanner()" class="text-gray-400 hover:text-white">✕</button>
         </div>
+    </div>
 
-        <!-- Middle Section: Tickers & Risk Dashboard -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- MAIN BODY -->
+    <div class="flex-1 flex max-w-7xl mx-auto w-full p-6 gap-6">
 
-            <!-- Markets & Tickers -->
-            <div class="glass-panel p-5 space-y-4">
-                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
-                    <span>Live Market Feeds</span>
-                    <span class="text-xs text-blue-400 font-mono">BINANCE REST/WS</span>
-                </h2>
-                <div class="space-y-3">
-                    <div class="bg-darkBg p-3 rounded-lg border border-cardBorder flex items-center justify-between">
-                        <div>
-                            <div class="font-bold text-white text-base">BTC / USDT</div>
-                            <div class="text-xs text-gray-400">Bitcoin Spot</div>
-                        </div>
-                        <div class="text-right">
-                            <div class="font-mono font-bold text-emerald-400 text-lg" id="btc-price">$64,250.00</div>
-                            <div class="text-xs text-emerald-400">+2.45% 24h</div>
-                        </div>
-                    </div>
+        <!-- Sidebar Navigation -->
+        <aside class="w-56 space-y-1">
+            <nav class="glass-card p-2 space-y-1 text-xs font-semibold">
+                <button onclick="switchTab('overview')" id="tab-btn-overview" class="w-full text-left px-3 py-2 rounded-md bg-panelBorder text-white flex items-center gap-2">
+                    📊 Overview
+                </button>
+                <button onclick="switchTab('scanner')" id="tab-btn-scanner" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    📡 Live Scanner
+                </button>
+                <button onclick="switchTab('strategies')" id="tab-btn-strategies" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    🧠 Strategies
+                </button>
+                <button onclick="switchTab('positions')" id="tab-btn-positions" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    💼 Positions
+                </button>
+                <button onclick="switchTab('risk')" id="tab-btn-risk" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    🛡️ Risk Center
+                </button>
+                <button onclick="switchTab('backtest')" id="tab-btn-backtest" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    📈 Backtest Engine
+                </button>
+                <button onclick="switchTab('ai')" id="tab-btn-ai" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    🤖 AI Committee
+                </button>
+                <button onclick="switchTab('audit')" id="tab-btn-audit" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    📋 Audit Trail
+                </button>
+            </nav>
 
-                    <div class="bg-darkBg p-3 rounded-lg border border-cardBorder flex items-center justify-between">
-                        <div>
-                            <div class="font-bold text-white text-base">ETH / USDT</div>
-                            <div class="text-xs text-gray-400">Ethereum Spot</div>
-                        </div>
-                        <div class="text-right">
-                            <div class="font-mono font-bold text-blue-400 text-lg" id="eth-price">$3,480.50</div>
-                            <div class="text-xs text-blue-400">+1.82% 24h</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Market Opportunity Gauge -->
-                <div class="bg-darkBg p-3.5 rounded-lg border border-cardBorder space-y-2">
-                    <div class="flex justify-between text-xs">
-                        <span class="text-gray-400">Opportunity Score:</span>
-                        <span class="font-bold text-emerald-400" id="opp-score">78 / 100 [TRADE]</span>
-                    </div>
-                    <div class="w-full bg-cardBg rounded-full h-2 overflow-hidden border border-cardBorder">
-                        <div class="bg-emerald-400 h-2 rounded-full" style="width: 78%"></div>
-                    </div>
-                </div>
+            <!-- Reset Experiment Quick Box -->
+            <div class="glass-card p-3 text-xs space-y-2">
+                <div class="font-bold text-gray-300">Paper Account</div>
+                <div class="text-gray-400">Reset virtual capital back to $5,000 baseline.</div>
+                <button onclick="confirmResetExperiment()" class="w-full btn btn-gray text-center justify-center text-xs">
+                    🔄 Reset Account
+                </button>
             </div>
+        </aside>
 
-            <!-- Risk & Circuit Breaker Dashboard -->
-            <div class="glass-panel p-5 space-y-4">
-                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
-                    <span>Risk Management</span>
-                    <span class="badge bg-emerald-500/20 text-emerald-400">ACTIVE</span>
-                </h2>
-                <div class="space-y-2.5 text-xs text-gray-300">
-                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
-                        <span class="text-gray-400">Risk Per Trade:</span>
-                        <span class="font-mono font-bold text-white">0.5% (~$25.00)</span>
+        <!-- Dynamic Main Content Area -->
+        <main class="flex-1 space-y-6">
+
+            <!-- TAB 1: OVERVIEW -->
+            <div id="tab-overview" class="space-y-6">
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="glass-card p-4">
+                        <div class="text-xs text-gray-400 uppercase font-semibold">Portfolio Equity</div>
+                        <div class="text-2xl font-bold text-white mt-1" id="val-equity">$5,000.00</div>
+                        <div class="text-xs text-emerald-400 mt-1">Virtual Capital</div>
                     </div>
-                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
-                        <span class="text-gray-400">Daily Max Loss Limit:</span>
-                        <span class="font-mono font-bold text-amber-400">$50.00 (1.0%)</span>
+                    <div class="glass-card p-4">
+                        <div class="text-xs text-gray-400 uppercase font-semibold">Daily Net PnL</div>
+                        <div class="text-2xl font-bold text-emerald-400 mt-1" id="val-daily-pnl">+$0.00</div>
+                        <div class="text-xs text-gray-400 mt-1">Goal: +$20 to +$100</div>
                     </div>
-                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
-                        <span class="text-gray-400">Max Open Positions:</span>
-                        <span class="font-mono font-bold text-white" id="pos-count">1 / 2</span>
+                    <div class="glass-card p-4">
+                        <div class="text-xs text-gray-400 uppercase font-semibold">Open Positions</div>
+                        <div class="text-2xl font-bold text-blue-400 mt-1" id="val-positions-count">0 / 2</div>
+                        <div class="text-xs text-gray-400 mt-1">Max 2 Concurrent</div>
                     </div>
-                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
-                        <span class="text-gray-400">Max Trades / Day:</span>
-                        <span class="font-mono font-bold text-white">3 / 5</span>
-                    </div>
-                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
-                        <span class="text-gray-400">Target Policy:</span>
-                        <span class="font-mono font-bold text-blue-400">SOFT ($20 - $100)</span>
-                    </div>
-                    <div class="flex justify-between py-1.5">
-                        <span class="text-gray-400">Circuit State:</span>
-                        <span class="badge bg-emerald-500/20 text-emerald-400" id="circuit-badge">NORMAL</span>
+                    <div class="glass-card p-4">
+                        <div class="text-xs text-gray-400 uppercase font-semibold">Risk Per Trade</div>
+                        <div class="text-2xl font-bold text-amber-400 mt-1" id="val-risk-pct">0.50%</div>
+                        <div class="text-xs text-gray-400 mt-1">~$25.00 Max Risk</div>
                     </div>
                 </div>
-            </div>
 
-            <!-- System Services Health -->
-            <div class="glass-panel p-5 space-y-3">
-                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300">System Health Monitor</h2>
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
-                        <span class="text-gray-400">Market Data</span>
-                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
-                    </div>
-                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
-                        <span class="text-gray-400">Database</span>
-                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
-                    </div>
-                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
-                        <span class="text-gray-400">Strategy</span>
-                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
-                    </div>
-                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
-                        <span class="text-gray-400">Risk Engine</span>
-                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
-                    </div>
-                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
-                        <span class="text-gray-400">Paper Broker</span>
-                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
-                    </div>
-                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
-                        <span class="text-gray-400">FastAPI</span>
-                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
-                    </div>
-                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
-                        <span class="text-gray-400">Telegram</span>
-                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
-                    </div>
-                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
-                        <span class="text-gray-400">Live Trading</span>
-                        <span class="text-rose-400 font-bold">LOCKED 🔒</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Real-Time Binance Market Scanner Panel (V3) -->
-        <div class="glass-panel p-5 space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                    <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center gap-2">
-                        <span>Binance Real-Time Market Scanner</span>
-                        <span class="badge bg-emerald-500/20 text-accentGreen">LIVE DISCOVERY</span>
-                    </h2>
-                    <p class="text-xs text-gray-400">Continuous liquidity, spread, and opportunity ranking for monitored USDT universe</p>
-                </div>
-                <div class="flex items-center gap-3 text-xs text-gray-400">
-                    <span>Min Vol: <b>$10M</b></span>
-                    <span>Max Spread: <b>15 bps</b></span>
-                </div>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-xs text-gray-300 font-mono">
-                    <thead class="bg-darkBg text-gray-400 uppercase text-[11px] border-b border-cardBorder">
-                        <tr>
-                            <th class="p-3">Symbol</th>
-                            <th class="p-3">Price</th>
-                            <th class="p-3">24h Volume</th>
-                            <th class="p-3">Spread (bps)</th>
-                            <th class="p-3">Volatility</th>
-                            <th class="p-3">Opp Score</th>
-                            <th class="p-3">Filter Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="scanner-table-body" class="divide-y divide-cardBorder">
-                        <!-- Populated by JS -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Bottom Section: Active Signal Cards & Open Paper Positions -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-            <!-- Latest Signal Card -->
-            <div class="glass-panel p-5 space-y-4">
-                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
-                    <span>Generated Signals</span>
-                    <span class="badge bg-emerald-500/20 text-accentGreen">RSI DIVERGENCE</span>
-                </h2>
-
-                <div class="bg-darkBg p-4 rounded-lg border border-cardBorder space-y-3">
+                <!-- Live Signals Panel -->
+                <div class="glass-card p-5 space-y-4">
                     <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="badge bg-emerald-500/20 text-accentGreen font-bold">LONG</span>
-                            <span class="font-bold text-white text-base">BTC / USDT</span>
-                        </div>
-                        <div class="text-right">
-                            <span class="text-xs text-gray-400">Signal Score:</span>
-                            <span class="font-bold text-accentGreen ml-1">82 / 100</span>
-                        </div>
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            <span>🎯 Active Market Signals</span>
+                        </h2>
+                        <span class="text-xs text-gray-400">Auto-evaluated on candle close</span>
                     </div>
-
-                    <p class="text-xs text-gray-300">
-                        Bullish RSI Divergence: Price Lower Low ($63,800.00 &rarr; $63,650.00) with RSI Higher Low (31.2 &rarr; 38.6). High confluence score.
-                    </p>
-
-                    <div class="grid grid-cols-3 gap-2 text-xs font-mono text-center pt-2 border-t border-cardBorder">
-                        <div class="bg-cardBg p-2 rounded border border-cardBorder">
-                            <div class="text-gray-400 text-[10px] uppercase">Entry</div>
-                            <div class="font-bold text-white mt-0.5">$63,850.00</div>
-                        </div>
-                        <div class="bg-cardBg p-2 rounded border border-cardBorder">
-                            <div class="text-gray-400 text-[10px] uppercase">Stop Loss</div>
-                            <div class="font-bold text-accentRed mt-0.5">$63,350.00</div>
-                        </div>
-                        <div class="bg-cardBg p-2 rounded border border-cardBorder">
-                            <div class="text-gray-400 text-[10px] uppercase">Take Profit</div>
-                            <div class="font-bold text-accentGreen mt-0.5">$64,900.00</div>
-                        </div>
-                    </div>
-
-                    <div class="flex justify-between items-center text-xs text-gray-400 pt-1">
-                        <span>Risk: <b>$25.00 (0.5%)</b></span>
-                        <span>R:R: <b class="text-accentGreen">1:2.1</b></span>
-                        <span>Status: <b class="text-blue-400">PAPER EXECUTED</b></span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Active Paper Positions -->
-            <div class="glass-panel p-5 space-y-4">
-                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
-                    <span>Active Paper Positions</span>
-                    <span class="badge bg-blue-500/20 text-accentBlue">SIMULATED</span>
-                </h2>
-
-                <div class="space-y-3">
-                    <div class="bg-darkBg p-4 rounded-lg border border-cardBorder space-y-2">
-                        <div class="flex justify-between items-center">
-                            <div class="flex items-center gap-2">
-                                <span class="badge bg-emerald-500/20 text-accentGreen">LONG</span>
-                                <span class="font-bold text-white">BTC / USDT</span>
-                                <span class="text-xs text-gray-400">Qty: 0.050000</span>
-                            </div>
-                            <div class="text-right font-mono font-bold text-accentGreen text-sm">
-                                +$37.10 (+1.16%)
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono pt-2 border-t border-cardBorder">
-                            <div>
-                                <span class="text-gray-400 text-[10px] block">ENTRY</span>
-                                <span class="text-white">$63,850.00</span>
-                            </div>
-                            <div>
-                                <span class="text-gray-400 text-[10px] block">CURRENT</span>
-                                <span class="text-emerald-400">$64,250.00</span>
-                            </div>
-                            <div>
-                                <span class="text-gray-400 text-[10px] block">STOP (BREAK-EVEN)</span>
-                                <span class="text-amber-400">$63,850.00</span>
-                            </div>
-                            <div>
-                                <span class="text-gray-400 text-[10px] block">TAKE PROFIT</span>
-                                <span class="text-accentGreen">$64,900.00</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-
-    </main>
-
-    <!-- Footer -->
-    <footer class="border-t border-cardBorder bg-cardBg px-6 py-3 text-xs text-gray-400 flex justify-between items-center">
-        <span>KRIPTO AGENT &copy; 2026 — Production-Oriented Paper Trading Architecture</span>
-        <div class="flex gap-4 font-mono">
-            <a href="/docs" class="text-accentBlue hover:underline">FastAPI Swagger Docs</a>
-            <span class="text-gray-600">|</span>
-            <span>EXPERIMENT: 7_DAY_5000_PAPER_TEST</span>
-        </div>
-    </footer>
-
-    <script>
-        function updateClock() {
-            const now = new Date();
-            document.getElementById('clock').innerText = now.toUTCString().slice(17, 25) + ' UTC';
-        }
-        setInterval(updateClock, 1000);
-        updateClock();
-
-        // Periodically fetch live API state
-        async function fetchState() {
-            try {
-                const res = await fetch('/portfolio');
-                if (res.ok) {
-                    const data = await res.json();
-                    document.getElementById('equity').innerText = '$' + data.equity.toFixed(2);
-                    document.getElementById('balance').innerText = '$' + data.balance.toFixed(2);
-                    document.getElementById('daily-pnl').innerText = (data.daily_pnl >= 0 ? '+$' : '-$') + Math.abs(data.daily_pnl).toFixed(2);
-                    document.getElementById('drawdown').innerText = (data.max_drawdown * 100).toFixed(2) + '%';
-                }
-            } catch (e) {
-                console.log('Polling portfolio state...', e);
-            }
-        }
-
-        async function fetchScanner() {
-            try {
-                const res = await fetch('/scanner');
-                if (res.ok) {
-                    const data = await res.json();
-                    const tbody = document.getElementById('scanner-table-body');
-                    if (data.ranked_symbols && data.ranked_symbols.length > 0) {
-                        tbody.innerHTML = data.ranked_symbols.map(s => {
-                            const badgeColor = s.trade_allowed ? 'text-emerald-400 bg-emerald-500/20' : 'text-rose-400 bg-rose-500/20';
-                            const badgeText = s.trade_allowed ? 'ALLOWED' : (s.rejection_reason || 'REJECTED');
-                            const oppColor = s.opportunity_score >= 70 ? 'text-accentGreen font-bold' : (s.opportunity_score >= 50 ? 'text-accentYellow' : 'text-gray-400');
-                            return `
-                                <tr class="hover:bg-cardBg transition">
-                                    <td class="p-3 font-bold text-white">${s.symbol}</td>
-                                    <td class="p-3">$${s.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4})}</td>
-                                    <td class="p-3">$${(s.volume_24h / 1e6).toFixed(1)}M</td>
-                                    <td class="p-3">${s.spread_bps.toFixed(1)} bps</td>
-                                    <td class="p-3">${s.volatility_pct.toFixed(2)}%</td>
-                                    <td class="p-3 ${oppColor}">${s.opportunity_score}</td>
-                                    <td class="p-3"><span class="badge ${badgeColor}">${badgeText}</span></td>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
+                                <tr>
+                                    <th class="p-2.5">Symbol</th>
+                                    <th class="p-2.5">Strategy</th>
+                                    <th class="p-2.5">Direction</th>
+                                    <th class="p-2.5">Score</th>
+                                    <th class="p-2.5">Entry</th>
+                                    <th class="p-2.5">Stop Loss</th>
+                                    <th class="p-2.5">Take Profit</th>
+                                    <th class="p-2.5">Reason</th>
                                 </tr>
-                            `;
-                        }).join('');
-                    }
+                            </thead>
+                            <tbody id="signals-tbody" class="divide-y divide-panelBorder">
+                                <tr>
+                                    <td colspan="8" class="p-4 text-center text-gray-500">No active signals currently generated. Monitoring Binance streams...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: LIVE SCANNER -->
+            <div id="tab-scanner" class="hidden space-y-4">
+                <div class="glass-card p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">📡 Binance Market Scanner</h2>
+                            <p class="text-xs text-gray-400">Scans monitored USDT pairs for liquidity (>$10M), spread tightness (&lt;15 bps), and opportunity score.</p>
+                        </div>
+                        <button onclick="runLiveScanner()" id="btn-run-scanner" class="btn btn-blue">
+                            🔍 Scan Now
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
+                                <tr>
+                                    <th class="p-2.5">Symbol</th>
+                                    <th class="p-2.5">Price</th>
+                                    <th class="p-2.5">24h Vol (USDT)</th>
+                                    <th class="p-2.5">Spread (BPS)</th>
+                                    <th class="p-2.5">Volatility %</th>
+                                    <th class="p-2.5">Opp Score</th>
+                                    <th class="p-2.5">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scanner-tbody" class="divide-y divide-panelBorder">
+                                <tr>
+                                    <td colspan="7" class="p-4 text-center text-gray-500">Loading live scanner data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: STRATEGIES -->
+            <div id="tab-strategies" class="hidden space-y-4">
+                <div class="glass-card p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">🧠 Strategy Management</h2>
+                            <p class="text-xs text-gray-400">Toggle active strategies. State changes are immediately applied to the Strategy Manager.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="glass-card p-4 space-y-3 bg-darkBg/40 border border-panelBorder">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-white text-sm">Trend Following</span>
+                                <span id="badge-trend" class="badge bg-emerald-500/20 text-accentGreen">ENABLED</span>
+                            </div>
+                            <p class="text-xs text-gray-400">EMA20 > EMA50 > EMA200 alignment, ADX >= 23, RSI 45-68 momentum.</p>
+                            <button onclick="toggleStrategy('trend_following', false)" id="btn-toggle-trend" class="w-full btn btn-yellow text-xs justify-center">
+                                Disable Strategy
+                            </button>
+                        </div>
+                        <div class="glass-card p-4 space-y-3 bg-darkBg/40 border border-panelBorder">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-white text-sm">Mean Reversion</span>
+                                <span id="badge-mean" class="badge bg-emerald-500/20 text-accentGreen">ENABLED</span>
+                            </div>
+                            <p class="text-xs text-gray-400">Bollinger Band bounce during SIDEWAYS regime with overbought/oversold RSI.</p>
+                            <button onclick="toggleStrategy('mean_reversion', false)" id="btn-toggle-mean" class="w-full btn btn-yellow text-xs justify-center">
+                                Disable Strategy
+                            </button>
+                        </div>
+                        <div class="glass-card p-4 space-y-3 bg-darkBg/40 border border-panelBorder">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-white text-sm">RSI Divergence</span>
+                                <span id="badge-div" class="badge bg-emerald-500/20 text-accentGreen">ENABLED</span>
+                            </div>
+                            <p class="text-xs text-gray-400">Swing pivot divergence with volume and key moving average confluence.</p>
+                            <button onclick="toggleStrategy('rsi_divergence', false)" id="btn-toggle-div" class="w-full btn btn-yellow text-xs justify-center">
+                                Disable Strategy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: POSITIONS -->
+            <div id="tab-positions" class="hidden space-y-4">
+                <div class="glass-card p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">💼 Active Paper Positions</h2>
+                            <p class="text-xs text-gray-400">Current open paper trading positions with real simulated stop-loss and trailing stops.</p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
+                                <tr>
+                                    <th class="p-2.5">Symbol</th>
+                                    <th class="p-2.5">Side</th>
+                                    <th class="p-2.5">Size</th>
+                                    <th class="p-2.5">Entry Price</th>
+                                    <th class="p-2.5">Current Price</th>
+                                    <th class="p-2.5">Unrealized PnL</th>
+                                    <th class="p-2.5">Stop Loss</th>
+                                    <th class="p-2.5">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positions-tbody" class="divide-y divide-panelBorder">
+                                <tr>
+                                    <td colspan="8" class="p-4 text-center text-gray-500">No open positions. System waiting for high-conviction signal setup.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: RISK CENTER -->
+            <div id="tab-risk" class="hidden space-y-4">
+                <div class="glass-card p-5 space-y-4">
+                    <div>
+                        <h2 class="text-sm font-bold text-white">🛡️ Risk Engine Configuration</h2>
+                        <p class="text-xs text-gray-400">Dynamic Risk Engine thresholds. Changes propagate through the Command Bus.</p>
+                    </div>
+                    <form onsubmit="saveRiskConfig(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                        <div>
+                            <label class="block text-gray-300 mb-1">Risk Per Trade (Fraction, e.g. 0.005 for 0.5%)</label>
+                            <input type="number" step="0.001" min="0.001" max="0.05" id="inp-risk-per-trade" value="0.005" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-gray-300 mb-1">Daily Max Loss (USD, e.g. 50.0 for $50)</label>
+                            <input type="number" step="5.0" min="10" max="500" id="inp-daily-max-loss" value="50.0" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-gray-300 mb-1">Max Open Positions (1 to 10)</label>
+                            <input type="number" step="1" min="1" max="10" id="inp-max-open-pos" value="2" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-gray-300 mb-1">ATR Stop Multiplier (1.0 to 5.0)</label>
+                            <input type="number" step="0.1" min="1.0" max="5.0" id="inp-atr-mult" value="1.5" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                        </div>
+                        <div class="md:col-span-2">
+                            <button type="submit" class="btn btn-green">
+                                💾 Save Risk Configuration
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- TAB 6: BACKTEST ENGINE -->
+            <div id="tab-backtest" class="hidden space-y-4">
+                <div class="glass-card p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">📈 VectorBT Backtest & Monte Carlo Engine</h2>
+                            <p class="text-xs text-gray-400">Runs high-performance vectorized portfolio backtesting and trade resampling.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+                        <div>
+                            <label class="block text-gray-300 mb-1">Symbol</label>
+                            <select id="bt-symbol" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                                <option value="BTC/USDT">BTC/USDT</option>
+                                <option value="ETH/USDT">ETH/USDT</option>
+                                <option value="SOL/USDT">SOL/USDT</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-300 mb-1">Strategy</label>
+                            <select id="bt-strategy" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                                <option value="trend_following">Trend Following</option>
+                                <option value="mean_reversion">Mean Reversion</option>
+                                <option value="rsi_divergence">RSI Divergence Swing</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-300 mb-1">Timeframe</label>
+                            <select id="bt-timeframe" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                                <option value="15m">15m</option>
+                                <option value="1h">1h</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end gap-2">
+                            <button onclick="runBacktestAction()" class="btn btn-blue w-full justify-center">
+                                ⚡ Run Backtest
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Backtest Results Display -->
+                    <div id="bt-results-panel" class="hidden glass-card p-4 bg-darkBg/50 space-y-3">
+                        <div class="font-bold text-white text-xs">VectorBT Backtest Results</div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                            <div class="bg-panelBg p-2.5 rounded border border-panelBorder">
+                                <div class="text-gray-400">Total Net PnL</div>
+                                <div id="bt-net-pnl" class="text-base font-bold text-emerald-400">+$0.00</div>
+                            </div>
+                            <div class="bg-panelBg p-2.5 rounded border border-panelBorder">
+                                <div class="text-gray-400">Win Rate</div>
+                                <div id="bt-win-rate" class="text-base font-bold text-white">0%</div>
+                            </div>
+                            <div class="bg-panelBg p-2.5 rounded border border-panelBorder">
+                                <div class="text-gray-400">Max Drawdown</div>
+                                <div id="bt-drawdown" class="text-base font-bold text-amber-400">0%</div>
+                            </div>
+                            <div class="bg-panelBg p-2.5 rounded border border-panelBorder">
+                                <div class="text-gray-400">Profit Factor</div>
+                                <div id="bt-pf" class="text-base font-bold text-white">0.0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Monte Carlo Button -->
+                    <div class="pt-2 border-t border-panelBorder flex items-center justify-between">
+                        <span class="text-xs text-gray-400">Resample trade return distribution across 1,000 permutations:</span>
+                        <button onclick="runMonteCarloAction()" class="btn btn-gray text-xs">
+                            🎲 Run Monte Carlo (1,000 runs)
+                        </button>
+                    </div>
+                    <div id="mc-results-panel" class="hidden glass-card p-3 bg-darkBg/50 text-xs">
+                        <pre id="mc-output" class="text-gray-300 font-mono"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 7: AI COMMITTEE -->
+            <div id="tab-ai" class="hidden space-y-4">
+                <div class="glass-card p-5 space-y-4">
+                    <div>
+                        <h2 class="text-sm font-bold text-white">🤖 AI Multi-Agent Advisory Committee</h2>
+                        <p class="text-xs text-gray-400">AI agents produce structured market analysis and recommendations. Risk Engine holds absolute veto authority.</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        <div class="glass-card p-3.5 bg-darkBg/40 border border-panelBorder space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-white">Technical Agent</span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen">ONLINE</span>
+                            </div>
+                            <div class="text-gray-400">Detects higher-timeframe market structure breaks and momentum alignment.</div>
+                        </div>
+                        <div class="glass-card p-3.5 bg-darkBg/40 border border-panelBorder space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-white">Risk Agent</span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen">ONLINE</span>
+                            </div>
+                            <div class="text-gray-400">Monitors capital preservation and portfolio volatility limits.</div>
+                        </div>
+                        <div class="glass-card p-3.5 bg-darkBg/40 border border-panelBorder space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-white">Orchestrator</span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen">ONLINE</span>
+                            </div>
+                            <div class="text-gray-400">Synthesizes committee recommendations into unified trading confidence.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 8: AUDIT TRAIL -->
+            <div id="tab-audit" class="hidden space-y-4">
+                <div class="glass-card p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">📋 Command Bus Audit Trail</h2>
+                            <p class="text-xs text-gray-400">Complete immutable record of all user control actions executed on the local backend.</p>
+                        </div>
+                        <button onclick="fetchAuditLogs()" class="btn btn-gray text-xs">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left font-mono">
+                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
+                                <tr>
+                                    <th class="p-2.5">Timestamp</th>
+                                    <th class="p-2.5">Action</th>
+                                    <th class="p-2.5">User</th>
+                                    <th class="p-2.5">Status</th>
+                                    <th class="p-2.5">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="audit-tbody" class="divide-y divide-panelBorder">
+                                <tr>
+                                    <td colspan="5" class="p-4 text-center text-gray-500">No audit records yet.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- CLIENT SCRIPT: COMMAND BUS DISPATCH & DATA SYNC -->
+    <script>
+        const API_BASE = '';
+
+        // Tab Switcher
+        function switchTab(tabId) {
+            const tabs = ['overview', 'scanner', 'strategies', 'positions', 'risk', 'backtest', 'ai', 'audit'];
+            tabs.forEach(t => {
+                const el = document.getElementById('tab-' + t);
+                const btn = document.getElementById('tab-btn-' + t);
+                if (t === tabId) {
+                    el.classList.remove('hidden');
+                    btn.classList.add('bg-panelBorder', 'text-white');
+                    btn.classList.remove('text-gray-400');
+                } else {
+                    el.classList.add('hidden');
+                    btn.classList.remove('bg-panelBorder', 'text-white');
+                    btn.classList.add('text-gray-400');
                 }
-            } catch (e) {
-                console.log('Polling scanner state...', e);
+            });
+
+            if (tabId === 'scanner') runLiveScanner();
+            if (tabId === 'audit') fetchAuditLogs();
+        }
+
+        // Action Banner Display
+        function showActionFeedback(success, message) {
+            const banner = document.getElementById('action-banner');
+            const msgEl = document.getElementById('action-banner-msg');
+            banner.classList.remove('hidden', 'bg-emerald-950', 'text-emerald-300', 'border-emerald-800', 'bg-red-950', 'text-red-300', 'border-red-800');
+            if (success) {
+                banner.classList.add('bg-emerald-950', 'text-emerald-300', 'border-emerald-800');
+            } else {
+                banner.classList.add('bg-red-950', 'text-red-300', 'border-red-800');
+            }
+            msgEl.innerText = message;
+        }
+
+        function closeActionBanner() {
+            document.getElementById('action-banner').classList.add('hidden');
+        }
+
+        // Central Command Bus Dispatcher
+        async function dispatchAction(endpoint, actionName, payload = null) {
+            try {
+                const opts = {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                if (payload) opts.body = JSON.stringify(payload);
+
+                const res = await fetch(API_BASE + endpoint, opts);
+                const data = await res.json();
+                
+                if (data.success !== false) {
+                    showActionFeedback(true, `[${actionName}] SUCCESS: ${data.message || 'Action executed successfully.'}`);
+                } else {
+                    showActionFeedback(false, `[${actionName}] BLOCKED: ${data.message || 'Action failed.'}`);
+                }
+                refreshSystemState();
+            } catch (err) {
+                showActionFeedback(false, `[${actionName}] Network Error: ${err.message}`);
             }
         }
 
-        fetchState();
-        fetchScanner();
-        setInterval(fetchState, 5000);
-        setInterval(fetchScanner, 10000);
+        // Strategy Toggle
+        async function toggleStrategy(stratName, enable) {
+            await dispatchAction(`/api/strategies/${stratName}/toggle`, 'TOGGLE_STRATEGY', { enabled: enable });
+        }
+
+        // Save Risk Config
+        async function saveRiskConfig(e) {
+            e.preventDefault();
+            const payload = {
+                risk_per_trade_pct: parseFloat(document.getElementById('inp-risk-per-trade').value),
+                daily_max_loss_pct: parseFloat(document.getElementById('inp-daily-max-loss').value),
+                max_open_positions: parseInt(document.getElementById('inp-max-open-pos').value),
+                atr_multiplier: parseFloat(document.getElementById('inp-atr-mult').value),
+            };
+            await dispatchAction('/api/risk/config', 'UPDATE_RISK_CONFIG', payload);
+        }
+
+        // Reset Experiment
+        async function confirmResetExperiment() {
+            if (confirm("Are you sure you want to reset the Paper Trading account to $5,000? All history will be cleared.")) {
+                await dispatchAction('/api/experiment/reset', 'RESET_EXPERIMENT', { confirmation: true });
+            }
+        }
+
+        // Close Position
+        async function closePositionAction(symbol) {
+            if (confirm(`Close paper position for ${symbol}?`)) {
+                await dispatchAction(`/api/positions/${encodeURIComponent(symbol)}/close`, 'CLOSE_POSITION', { reason: 'MANUAL_DASHBOARD_CLOSE' });
+                refreshPositions();
+            }
+        }
+
+        // Live Scanner Action
+        async function runLiveScanner() {
+            const btn = document.getElementById('btn-run-scanner');
+            btn.innerText = 'Scanning...';
+            btn.disabled = true;
+            try {
+                const res = await fetch(API_BASE + '/api/scanner/run', { method: 'POST' });
+                const data = await res.json();
+                const tbody = document.getElementById('scanner-tbody');
+                if (data.opportunities && data.opportunities.length > 0) {
+                    tbody.innerHTML = data.opportunities.map(s => `
+                        <tr class="hover:bg-panelBorder/30">
+                            <td class="p-2.5 font-bold text-white">${s.symbol}</td>
+                            <td class="p-2.5">$${s.price.toFixed(2)}</td>
+                            <td class="p-2.5">$${(s.volume_24h / 1e6).toFixed(1)}M</td>
+                            <td class="p-2.5 ${s.spread_bps > 15 ? 'text-red-400' : 'text-emerald-400'}">${s.spread_bps.toFixed(1)} bps</td>
+                            <td class="p-2.5">${s.volatility_pct.toFixed(2)}%</td>
+                            <td class="p-2.5 font-bold text-amber-400">${s.opportunity_score.toFixed(0)}/100</td>
+                            <td class="p-2.5">
+                                ${s.trade_allowed ? '<span class="badge bg-emerald-500/20 text-accentGreen">ELIGIBLE</span>' : '<span class="badge bg-red-500/20 text-accentRed">' + s.rejection_reason + '</span>'}
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                btn.innerText = '🔍 Scan Now';
+                btn.disabled = false;
+            }
+        }
+
+        // Run VectorBT Backtest
+        async function runBacktestAction() {
+            const payload = {
+                symbol: document.getElementById('bt-symbol').value,
+                strategy: document.getElementById('bt-strategy').value,
+                timeframe: document.getElementById('bt-timeframe').value,
+                initial_capital: 5000.0,
+                fees: 0.001,
+                slippage_bps: 5.0
+            };
+            try {
+                const res = await fetch(API_BASE + '/api/backtest/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                document.getElementById('bt-results-panel').classList.remove('hidden');
+                document.getElementById('bt-net-pnl').innerText = `${data.total_net_pnl >= 0 ? '+' : ''}$${data.total_net_pnl.toFixed(2)} (${data.total_return_pct.toFixed(2)}%)`;
+                document.getElementById('bt-win-rate').innerText = `${data.win_rate.toFixed(1)}% (${data.total_trades} trades)`;
+                document.getElementById('bt-drawdown').innerText = `${data.max_drawdown.toFixed(2)}%`;
+                document.getElementById('bt-pf').innerText = `${data.profit_factor.toFixed(2)}`;
+            } catch (err) {
+                alert('Backtest error: ' + err.message);
+            }
+        }
+
+        // Run Monte Carlo
+        async function runMonteCarloAction() {
+            try {
+                const res = await fetch(API_BASE + '/api/monte-carlo/run', { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('mc-results-panel').classList.remove('hidden');
+                document.getElementById('mc-output').innerText = JSON.stringify(data.metrics, null, 2);
+            } catch (err) {
+                alert('Monte Carlo error: ' + err.message);
+            }
+        }
+
+        // Fetch Audit Logs
+        async function fetchAuditLogs() {
+            try {
+                const res = await fetch(API_BASE + '/api/system/audit-logs');
+                const list = await res.json();
+                const tbody = document.getElementById('audit-tbody');
+                if (list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">No actions executed yet.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = list.map(a => `
+                    <tr class="hover:bg-panelBorder/30">
+                        <td class="p-2.5 text-gray-400">${new Date(a.timestamp).toLocaleTimeString()}</td>
+                        <td class="p-2.5 font-bold text-white">${a.action}</td>
+                        <td class="p-2.5 text-gray-400">${a.user}</td>
+                        <td class="p-2.5">${a.success ? '<span class="text-emerald-400">SUCCESS</span>' : '<span class="text-red-400">FAILED</span>'}</td>
+                        <td class="p-2.5 text-gray-300">${a.result.message || JSON.stringify(a.result)}</td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // System State Refresh Loop
+        async function refreshSystemState() {
+            try {
+                const res = await fetch(API_BASE + '/health');
+                const data = await res.json();
+                const stateEl = document.getElementById('lbl-state');
+                const dotEl = document.getElementById('dot-state');
+                stateEl.innerText = data.system_state || 'TRADING';
+                if (data.system_state === 'RISK_LOCK' || data.system_state === 'STOPPED') {
+                    dotEl.className = 'w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse';
+                    stateEl.className = 'text-red-400';
+                } else if (data.system_state === 'PAUSED') {
+                    dotEl.className = 'w-2.5 h-2.5 rounded-full bg-amber-500';
+                    stateEl.className = 'text-amber-400';
+                } else {
+                    dotEl.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+                    stateEl.className = 'text-emerald-400';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // Fetch Positions
+        async function refreshPositions() {
+            try {
+                const res = await fetch(API_BASE + '/positions');
+                const posList = await res.json();
+                const tbody = document.getElementById('positions-tbody');
+                document.getElementById('val-positions-count').innerText = `${posList.length} / 2`;
+                if (posList.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">No open positions. System waiting for high-conviction signal setup.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = posList.map(p => `
+                    <tr class="hover:bg-panelBorder/30">
+                        <td class="p-2.5 font-bold text-white">${p.symbol}</td>
+                        <td class="p-2.5 ${p.side === 'LONG' ? 'text-emerald-400' : 'text-red-400'} font-bold">${p.side}</td>
+                        <td class="p-2.5">${p.quantity.toFixed(4)}</td>
+                        <td class="p-2.5">$${p.entry_price.toFixed(2)}</td>
+                        <td class="p-2.5">$${p.current_price.toFixed(2)}</td>
+                        <td class="p-2.5 font-bold ${p.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}">${p.unrealized_pnl >= 0 ? '+' : ''}$${p.unrealized_pnl.toFixed(2)}</td>
+                        <td class="p-2.5 text-gray-400">$${p.stop_loss.toFixed(2)}</td>
+                        <td class="p-2.5">
+                            <button onclick="closePositionAction('${p.symbol}')" class="btn btn-red text-xs py-1 px-2">
+                                Close
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // Initialize polling
+        setInterval(refreshSystemState, 5000);
+        setInterval(refreshPositions, 5000);
+        refreshSystemState();
+        refreshPositions();
     </script>
 </body>
 </html>
