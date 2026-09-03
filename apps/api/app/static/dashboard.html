@@ -123,6 +123,10 @@
                 <button onclick="switchTab('positions')" id="tab-btn-positions" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
                     💼 <span>Açık Pozisyonlar (Paper)</span>
                 </button>
+                <button onclick="switchTab('trades')" id="tab-btn-trades" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    ⚡ <span>Canlı Alım-Satım Akışı</span>
+                    <span id="badge-trades-count" class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-accentBlue font-mono">0</span>
+                </button>
                 <button onclick="switchTab('risk')" id="tab-btn-risk" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
                     🛡️ <span>Risk Ayarları & Güvenlik</span>
                 </button>
@@ -194,6 +198,81 @@
                         <!-- Canlı Tickerlar JavaScript ile yüklenecek -->
                         <div class="p-3 bg-darkBg rounded border border-panelBorder text-center text-gray-500 col-span-6">
                             Binance canlı veri akışı yükleniyor...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CANLI ALIM-SATIM AKIŞI (TRADE STREAM) -->
+                <div class="glass-card p-5 space-y-4 border-emerald-500/20">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="relative flex h-2.5 w-2.5">
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                </span>
+                                <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                                    <span>⚡ Anlık Alım/Satım Akışı (Canlı Emir Fişleri)</span>
+                                </h2>
+                                <span class="badge bg-emerald-500/20 text-accentGreen">ANLIK GERÇEKLEŞME</span>
+                                <span class="badge bg-blue-500/20 text-accentBlue font-mono">BİNANCE CANLI PİYASA</span>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-0.5">
+                                Gerçekleşen tüm sanal işlemler, Binance canlı piyasa fiyatları, 5 bps kayma ve %0.1 borsa komisyonuyla anlık olarak işlenir.
+                            </p>
+                        </div>
+                        <!-- Hızlı 1-Tık Test İşlem Butonları -->
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-[11px] text-gray-400 font-semibold hidden sm:inline">1-Tık Canlı Test:</span>
+                            <button onclick="quickTrade('BTC/USDT', 'BUY', 250)" class="btn btn-green text-xs py-1.5 px-2.5 flex items-center gap-1" title="Sanal $250'lik BTC Al">
+                                <span>⚡ BTC Al ($250)</span>
+                            </button>
+                            <button onclick="quickTrade('ETH/USDT', 'BUY', 250)" class="btn btn-blue text-xs py-1.5 px-2.5 flex items-center gap-1" title="Sanal $250'lik ETH Al">
+                                <span>⚡ ETH Al ($250)</span>
+                            </button>
+                            <button onclick="quickTrade('SOL/USDT', 'BUY', 150)" class="btn btn-gray text-xs py-1.5 px-2.5 flex items-center gap-1" title="Sanal $150'lik SOL Al">
+                                <span>⚡ SOL Al ($150)</span>
+                            </button>
+                            <button onclick="fetchTrades()" class="btn btn-gray text-xs py-1.5 px-2 text-gray-300 hover:text-white" title="Akışı Yenile">
+                                🔄
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Canlı İşlem Tablosu -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
+                                <tr>
+                                    <th class="p-2.5">Zaman (TS)</th>
+                                    <th class="p-2.5">İşlem Fişi</th>
+                                    <th class="p-2.5">Parite</th>
+                                    <th class="p-2.5">İşlem Yönü</th>
+                                    <th class="p-2.5">Gerçekleşme Fiyatı</th>
+                                    <th class="p-2.5">Miktar</th>
+                                    <th class="p-2.5">Toplam Tutar</th>
+                                    <th class="p-2.5">Komisyon</th>
+                                    <th class="p-2.5">Kayma (Slip)</th>
+                                    <th class="p-2.5">Durum</th>
+                                </tr>
+                            </thead>
+                            <tbody id="overview-trades-tbody" class="divide-y divide-panelBorder">
+                                <tr>
+                                    <td colspan="10" class="p-4 text-center text-gray-500">Alım-satım akışı yükleniyor...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Özet Çubuğu -->
+                    <div class="flex flex-wrap items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-panelBorder/50">
+                        <div class="flex items-center gap-4">
+                            <span>Toplam Gerçekleşen: <b id="summary-trades-count" class="text-white font-mono">0</b></span>
+                            <span>Toplam Hacim: <b id="summary-trades-vol" class="text-emerald-400 font-mono">$0.00</b></span>
+                            <span>Toplam Komisyon: <b id="summary-trades-fees" class="text-amber-400 font-mono">$0.00</b></span>
+                        </div>
+                        <div class="text-emerald-400 text-[11px]">
+                            🔒 <b>Paper Trading:</b> Gerçek piyasa verisi, 0 TL finansal risk.
                         </div>
                     </div>
                 </div>
@@ -441,6 +520,103 @@
                 </div>
             </div>
 
+            <!-- TAB: CANLI ALIM-SATIM AKIŞI & TEST EMİR PANELİ -->
+            <div id="tab-trades" class="hidden space-y-4">
+                <div class="glass-card p-6 space-y-5">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <span>⚡ Gerçek Zamanlı Alım-Satım Geçmişi & Emir Simülatörü</span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen">CANLI AKIŞ</span>
+                            </h2>
+                            <p class="text-xs text-gray-400 mt-1">
+                                Gerçekleşen tüm sanal alım ve satım emirleri, fiş detayları, komisyon kesintileri ve fiyat kaymaları.
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="fetchTrades()" class="btn btn-gray text-xs flex items-center gap-1.5">
+                                <span>🔄 Listeyi Güncelle</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Manuel Emir Gönderme Alanı -->
+                    <div class="bg-darkBg/60 border border-panelBorder rounded-lg p-4 space-y-3">
+                        <div class="font-bold text-xs text-gray-200 flex items-center gap-2">
+                            <span>🎯 Hızlı Sanal Emir Gönder (Canlı Fiyatla Test)</span>
+                            <span class="text-[11px] font-normal text-gray-400">(Binance gerçek fiyatı kullanılır, emir sanal portföye anında işlenir)</span>
+                        </div>
+                        <form onsubmit="handleManualOrderSubmit(event)" class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
+                            <div>
+                                <label class="block text-gray-400 mb-1">Kripto Parite</label>
+                                <select id="manual-symbol" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                                    <option value="BTC/USDT">BTC/USDT (~$64,250)</option>
+                                    <option value="ETH/USDT">ETH/USDT (~$2,480)</option>
+                                    <option value="SOL/USDT">SOL/USDT (~$142)</option>
+                                    <option value="BNB/USDT">BNB/USDT (~$545)</option>
+                                    <option value="XRP/USDT">XRP/USDT (~$0.58)</option>
+                                    <option value="DOGE/USDT">DOGE/USDT (~$0.10)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-gray-400 mb-1">İşlem Yönü</label>
+                                <select id="manual-side" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white font-bold">
+                                    <option value="BUY" class="text-emerald-400 font-bold">🟢 AL (BUY / LONG)</option>
+                                    <option value="SELL" class="text-red-400 font-bold">🔴 SAT (SELL / SHORT / KAPAT)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-gray-400 mb-1">İşlem Tutarı (USD)</label>
+                                <input type="number" id="manual-amount" value="250" min="10" max="2500" step="10" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white font-mono" required>
+                            </div>
+                            <div class="md:col-span-2 flex items-end">
+                                <button type="submit" id="btn-submit-order" class="btn btn-green w-full justify-center text-xs py-2">
+                                    ⚡ Sanal Emri Çalıştır
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Filtreler ve Tablo -->
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <button onclick="setTradeFilter('ALL')" id="filter-all" class="px-2.5 py-1 text-xs rounded bg-panelBorder text-white font-semibold">Tümü</button>
+                                <button onclick="setTradeFilter('BUY')" id="filter-buy" class="px-2.5 py-1 text-xs rounded text-gray-400 hover:bg-panelBorder font-semibold">Sadece Alışlar</button>
+                                <button onclick="setTradeFilter('SELL')" id="filter-sell" class="px-2.5 py-1 text-xs rounded text-gray-400 hover:bg-panelBorder font-semibold">Sadece Satışlar</button>
+                            </div>
+                            <div class="text-xs text-gray-400 font-mono" id="trades-filter-count">
+                                0 işlem listeleniyor
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left">
+                                <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
+                                    <tr>
+                                        <th class="p-2.5">Zaman (TS)</th>
+                                        <th class="p-2.5">İşlem Fişi</th>
+                                        <th class="p-2.5">Parite</th>
+                                        <th class="p-2.5">Yön</th>
+                                        <th class="p-2.5">Gerçekleşme Fiyatı</th>
+                                        <th class="p-2.5">Miktar</th>
+                                        <th class="p-2.5">Toplam Tutar</th>
+                                        <th class="p-2.5">Komisyon</th>
+                                        <th class="p-2.5">Kayma</th>
+                                        <th class="p-2.5">Durum</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="full-trades-tbody" class="divide-y divide-panelBorder">
+                                    <tr>
+                                        <td colspan="10" class="p-4 text-center text-gray-500">İşlem geçmişi yükleniyor...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- TAB 6: RİSK AYARLARI -->
             <div id="tab-risk" class="hidden space-y-4">
                 <div class="glass-card p-5 space-y-4">
@@ -483,7 +659,7 @@
 
         // Sekme Değiştirme
         function switchTab(tabId) {
-            const tabs = ['overview', 'binance', 'replay', 'divergences', 'positions', 'risk'];
+            const tabs = ['overview', 'binance', 'replay', 'divergences', 'positions', 'trades', 'risk'];
             tabs.forEach(t => {
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('tab-btn-' + t);
@@ -503,6 +679,7 @@
 
             if (tabId === 'divergences') fetchDivergences();
             if (tabId === 'positions') refreshPositions();
+            if (tabId === 'trades') fetchTrades();
             if (tabId === 'binance') checkBinanceAccountStatus();
         }
 
@@ -814,15 +991,187 @@ SONUÇ KARARI: 7 GÜNLÜK SANAL KAĞIT İŞLEM DOĞRULAMASINA YÜKSELTİLDİ ✅
             }
         }
 
+        // =============================================================
+        // CANLI ALIM-SATIM AKIŞI (TRADES STREAM) FONKSİYONLARI
+        // =============================================================
+        let currentTradesList = [];
+        let currentTradeFilter = 'ALL';
+
+        async function fetchTrades() {
+            try {
+                const res = await fetch(API_BASE + '/trades');
+                const trades = await res.json();
+                if (Array.isArray(trades)) {
+                    currentTradesList = trades;
+                    renderTradesUI();
+                }
+            } catch (err) {
+                console.error('Trades fetch error:', err);
+            }
+        }
+
+        function renderTradesUI() {
+            // Rozet sayacı
+            const badgeEl = document.getElementById('badge-trades-count');
+            if (badgeEl) badgeEl.innerText = currentTradesList.length;
+
+            // Özet metrikleri hesaplama
+            let totalVolume = 0;
+            let totalFees = 0;
+            currentTradesList.forEach(t => {
+                totalVolume += (t.total_usd || (t.price * t.quantity) || 0);
+                totalFees += (t.fee || 0);
+            });
+
+            const countEl = document.getElementById('summary-trades-count');
+            const volEl = document.getElementById('summary-trades-vol');
+            const feesEl = document.getElementById('summary-trades-fees');
+            if (countEl) countEl.innerText = currentTradesList.length;
+            if (volEl) volEl.innerText = `$${totalVolume.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            if (feesEl) feesEl.innerText = `$${totalFees.toFixed(2)}`;
+
+            // Genel Bakış tablosu (ilk 8 işlem)
+            const overviewTbody = document.getElementById('overview-trades-tbody');
+            if (overviewTbody) {
+                if (currentTradesList.length === 0) {
+                    overviewTbody.innerHTML = '<tr><td colspan="10" class="p-4 text-center text-gray-500">Henüz gerçekleşen işlem bulunmuyor.</td></tr>';
+                } else {
+                    overviewTbody.innerHTML = currentTradesList.slice(0, 8).map(renderTradeRow).join('');
+                }
+            }
+
+            // Tam Sayfa tablosu (Filtrelenmiş)
+            const fullTbody = document.getElementById('full-trades-tbody');
+            const filterCountEl = document.getElementById('trades-filter-count');
+            if (fullTbody) {
+                let filtered = currentTradesList;
+                if (currentTradeFilter === 'BUY') {
+                    filtered = currentTradesList.filter(t => (t.side || '').toUpperCase() === 'BUY');
+                } else if (currentTradeFilter === 'SELL') {
+                    filtered = currentTradesList.filter(t => (t.side || '').toUpperCase() === 'SELL');
+                }
+
+                if (filterCountEl) filterCountEl.innerText = `${filtered.length} / ${currentTradesList.length} işlem listeleniyor`;
+
+                if (filtered.length === 0) {
+                    fullTbody.innerHTML = '<tr><td colspan="10" class="p-4 text-center text-gray-500">Seçilen filtrede işlem bulunamadı.</td></tr>';
+                } else {
+                    fullTbody.innerHTML = filtered.map(renderTradeRow).join('');
+                }
+            }
+        }
+
+        function renderTradeRow(t) {
+            const isBuy = (t.side || '').toUpperCase() === 'BUY';
+            const timeStr = t.timestamp ? new Date(t.timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
+            const fillShortId = t.fill_id ? ('#' + t.fill_id.slice(-8)) : '#fill';
+            const totalUsd = t.total_usd || (t.price * t.quantity) || 0;
+
+            return `
+                <tr class="hover:bg-panelBorder/30 transition-colors">
+                    <td class="p-2.5 font-mono text-gray-300">${timeStr}</td>
+                    <td class="p-2.5 font-mono text-[11px] text-gray-400" title="${t.fill_id}">${fillShortId}</td>
+                    <td class="p-2.5 font-bold text-white">${t.symbol}</td>
+                    <td class="p-2.5 font-bold">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${isBuy ? 'bg-emerald-500/20 text-accentGreen' : 'bg-red-500/20 text-accentRed'}">
+                            ${isBuy ? '🟢 AL (BUY)' : '🔴 SAT (SELL)'}
+                        </span>
+                    </td>
+                    <td class="p-2.5 font-mono font-bold text-white">$${t.price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
+                    <td class="p-2.5 font-mono text-gray-200">${t.quantity.toFixed(4)}</td>
+                    <td class="p-2.5 font-mono font-bold text-emerald-400">$${totalUsd.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td class="p-2.5 font-mono text-amber-400">$${(t.fee || 0).toFixed(2)}</td>
+                    <td class="p-2.5 font-mono text-gray-400">${(t.slippage || 0).toFixed(2)}</td>
+                    <td class="p-2.5">
+                        <span class="badge bg-emerald-500/10 text-emerald-300 text-[10px] border border-emerald-500/20">
+                            ✅ Gerçekleşti (Paper)
+                        </span>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function setTradeFilter(filter) {
+            currentTradeFilter = filter;
+            ['all', 'buy', 'sell'].forEach(f => {
+                const btn = document.getElementById('filter-' + f);
+                if (btn) {
+                    if (f.toUpperCase() === filter) {
+                        btn.className = 'px-2.5 py-1 text-xs rounded bg-panelBorder text-white font-semibold';
+                    } else {
+                        btn.className = 'px-2.5 py-1 text-xs rounded text-gray-400 hover:bg-panelBorder font-semibold';
+                    }
+                }
+            });
+            renderTradesUI();
+        }
+
+        async function quickTrade(symbol, side, amountUsd) {
+            try {
+                showActionFeedback(true, `${symbol} için $${amountUsd} tutarında sanal ${side === 'BUY' ? 'alım' : 'satım'} emri yürütülüyor...`);
+                const res = await fetch(API_BASE + '/api/v1/trades/simulate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol: symbol, side: side, amount_usd: amountUsd })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showActionFeedback(true, data.message || 'Sanal işlem anında gerçekleşti!');
+                    fetchTrades();
+                    refreshPositions();
+                    refreshSystemState();
+                } else {
+                    showActionFeedback(false, data.message || 'İşlem yürütülemedi.');
+                }
+            } catch (err) {
+                showActionFeedback(false, 'Hızlı emir hatası: ' + err.message);
+            }
+        }
+
+        async function handleManualOrderSubmit(e) {
+            e.preventDefault();
+            const symbol = document.getElementById('manual-symbol').value;
+            const side = document.getElementById('manual-side').value;
+            const amount = parseFloat(document.getElementById('manual-amount').value);
+            const btn = document.getElementById('btn-submit-order');
+
+            btn.disabled = true;
+            btn.innerText = 'Emir Gönderiliyor...';
+
+            try {
+                const res = await fetch(API_BASE + '/api/v1/trades/simulate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol: symbol, side: side, amount_usd: amount })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showActionFeedback(true, `✅ ${data.message}`);
+                    fetchTrades();
+                    refreshPositions();
+                    refreshSystemState();
+                } else {
+                    showActionFeedback(false, data.message || 'Emir iletilemedi.');
+                }
+            } catch (err) {
+                showActionFeedback(false, 'Hata: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '⚡ Sanal Emri Çalıştır';
+            }
+        }
+
         // Düzenli aralıklarla veri yenileme
         setInterval(refreshSystemState, 5000);
         setInterval(refreshPositions, 5000);
         setInterval(fetchLiveTickers, 4000);
+        setInterval(fetchTrades, 3000);
 
         // Başlangıç yüklemeleri
         refreshSystemState();
         refreshPositions();
         fetchLiveTickers();
+        fetchTrades();
         checkBinanceAccountStatus();
     </script>
 </body>

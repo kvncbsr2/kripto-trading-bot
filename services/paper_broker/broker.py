@@ -206,6 +206,17 @@ class PaperBroker:
         closed_pos = self.portfolio.close_position(symbol, exit_price, fee)
         if closed_pos:
             self.closed_positions_history.append(closed_pos)
+            close_fill = Fill(
+                fill_id=f"fill_{uuid.uuid4().hex[:12]}",
+                order_id=f"ord_{uuid.uuid4().hex[:12]}",
+                symbol=symbol,
+                side=OrderSide.SELL if pos.side == PositionSide.LONG else OrderSide.BUY,
+                price=exit_price,
+                quantity=pos.quantity,
+                fee=fee,
+                slippage=0.0,
+            )
+            self.fills.append(close_fill)
             logger.info(
                 f"Manual Paper Position CLOSED [{reason}]: {symbol} Net PnL: ${closed_pos.realized_pnl:+.2f}"
             )
