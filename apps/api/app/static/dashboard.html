@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="tr" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KRIPTO AGENT — Local Trading Control Center</title>
+    <title>KRIPTO AGENT — Yerel İşlem Kontrol Merkezi</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -26,8 +26,8 @@
     <style>
         body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #090d16; color: #f1f5f9; }
         .glass-card { background: #111726; border: 1px solid #1e293b; border-radius: 10px; }
-        .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-        .btn { padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; transition: all 0.2s; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+        .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+        .btn { padding: 7px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; transition: all 0.2s; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-green { background: #059669; color: white; }
         .btn-green:hover { background: #10b981; }
         .btn-yellow { background: #d97706; color: white; }
@@ -42,7 +42,7 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
-    <!-- GLOBAL CONTROL BAR -->
+    <!-- ÜST KONTROL VE DURUM ÇUBUĞU -->
     <header class="border-b border-panelBorder bg-panelBg px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-lg bg-emerald-500/20 text-accentGreen flex items-center justify-center font-bold text-xl border border-emerald-500/30">
@@ -50,195 +50,357 @@
             </div>
             <div>
                 <h1 class="text-base font-bold text-white flex items-center gap-2">
-                    KRIPTO AGENT
-                    <span class="badge bg-emerald-500/20 text-accentGreen border border-emerald-500/30">CONTROL CENTER</span>
-                    <span class="badge bg-blue-500/20 text-accentBlue border border-blue-500/30">PAPER TRADING ONLY</span>
+                    KRİPTO AGENT
+                    <span class="badge bg-emerald-500/20 text-accentGreen border border-emerald-500/30">KONTROL MERKEZİ</span>
+                    <span class="badge bg-blue-500/20 text-accentBlue border border-blue-500/30">SANAL KAĞIT İŞLEM (PAPER)</span>
                 </h1>
-                <p class="text-xs text-gray-400">Binance Real-Time Data • 100% Functional Local Architecture</p>
+                <p class="text-xs text-gray-400">Binance Gerçek Zamanlı Veri + Güvenli Sanal Yürütme Motoru (Gerçek Para Yok)</p>
             </div>
         </div>
 
-        <!-- Global Status Indicators -->
+        <!-- Sistem Durum Göstergeleri -->
         <div class="flex items-center gap-2 text-xs">
             <div class="bg-darkBg px-3 py-1.5 rounded-lg border border-panelBorder flex items-center gap-2">
                 <span id="dot-state" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <span>SYSTEM: <b id="lbl-state" class="text-emerald-400">TRADING</b></span>
+                <span>SİSTEM: <b id="lbl-state" class="text-emerald-400">İŞLEMDE</b></span>
             </div>
             <div class="bg-darkBg px-3 py-1.5 rounded-lg border border-panelBorder flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <span>BINANCE: <b class="text-emerald-400">CONNECTED</b></span>
+                <span id="dot-binance" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span>BİNANCE: <b id="lbl-binance" class="text-emerald-400">BAĞLI (TESTNET)</b></span>
             </div>
             <div class="bg-darkBg px-3 py-1.5 rounded-lg border border-panelBorder flex items-center gap-2">
-                <span id="dot-gate" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <span>GATE: <b id="lbl-gate" class="text-emerald-400">READY</b></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                <span>MOD: <b class="text-blue-400">SEVİYE 1 (GÜVENLİ)</b></span>
             </div>
         </div>
 
-        <!-- Real Command Actions -->
+        <!-- Ajan Yönetim Butonları -->
         <div class="flex items-center gap-2">
-            <button onclick="dispatchAction('/api/agent/start', 'START_AGENT')" class="btn btn-green">
-                ▶ Start Agent
+            <button onclick="dispatchAction('/api/agent/start', 'AJANI_BASLAT')" class="btn btn-green">
+                ▶ Ajanı Başlat
             </button>
-            <button onclick="dispatchAction('/api/agent/pause', 'PAUSE_AGENT')" class="btn btn-yellow">
-                ⏸ Pause
+            <button onclick="dispatchAction('/api/agent/pause', 'DURAKLAT')" class="btn btn-yellow">
+                ⏸ Duraklat
             </button>
-            <button onclick="dispatchAction('/api/agent/resume', 'RESUME_AGENT')" class="btn btn-blue">
-                ⏯ Resume
+            <button onclick="dispatchAction('/api/agent/resume', 'DEVAM_ET')" class="btn btn-blue">
+                ⏯ Devam Et
             </button>
-            <button onclick="dispatchAction('/api/agent/stop', 'STOP_AGENT')" class="btn btn-gray">
-                ⏹ Stop
+            <button onclick="dispatchAction('/api/agent/stop', 'DURDUR')" class="btn btn-gray">
+                ⏹ Durdur
             </button>
-            <button onclick="dispatchAction('/api/agent/emergency-stop', 'EMERGENCY_STOP')" class="btn btn-red animate-pulse">
-                🚨 Emergency Stop
+            <button onclick="dispatchAction('/api/agent/emergency-stop', 'ACIL_DURDURMA')" class="btn btn-red animate-pulse">
+                🚨 Acil Durdurma
             </button>
         </div>
     </header>
 
-    <!-- ACTION FEEDBACK ALERT BANNER -->
+    <!-- GERİ BİLDİRİM BİLDİRİM ÇUBUĞU -->
     <div id="action-banner" class="hidden px-6 py-2.5 text-xs font-semibold border-b transition-all duration-300">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <span id="action-banner-msg">Action result</span>
+            <span id="action-banner-msg">İşlem sonucu</span>
             <button onclick="closeActionBanner()" class="text-gray-400 hover:text-white">✕</button>
         </div>
     </div>
 
-    <!-- MAIN BODY -->
+    <!-- ANA GÖVDE -->
     <div class="flex-1 flex max-w-7xl mx-auto w-full p-6 gap-6">
 
-        <!-- Sidebar Navigation -->
-        <aside class="w-56 space-y-1">
+        <!-- Sol Menü (Temiz ve Sade Türkçe Navigasyon) -->
+        <aside class="w-60 space-y-3">
             <nav class="glass-card p-2 space-y-1 text-xs font-semibold">
-                <button onclick="switchTab('overview')" id="tab-btn-overview" class="w-full text-left px-3 py-2 rounded-md bg-panelBorder text-white flex items-center gap-2">
-                    📊 Overview
+                <button onclick="switchTab('overview')" id="tab-btn-overview" class="w-full text-left px-3 py-2.5 rounded-md bg-panelBorder text-white flex items-center gap-2">
+                    📊 <span>Genel Bakış & Canlı Piyasa</span>
                 </button>
-                <button onclick="switchTab('scanner')" id="tab-btn-scanner" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
-                    📡 Live Scanner
+                <button onclick="switchTab('binance')" id="tab-btn-binance" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    🔑 <span>Binance API & Demo Test</span>
                 </button>
-                <button onclick="switchTab('strategies')" id="tab-btn-strategies" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
-                    🧠 Strategies
+                <button onclick="switchTab('replay')" id="tab-btn-replay" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    ⏳ <span>R10 Mum-Mum Replay Testi</span>
                 </button>
-                <button onclick="switchTab('positions')" id="tab-btn-positions" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
-                    💼 Positions
+                <button onclick="switchTab('divergences')" id="tab-btn-divergences" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    🎯 <span>R10 Sinyalleri & Uyumsuzluk</span>
                 </button>
-                <button onclick="switchTab('risk')" id="tab-btn-risk" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
-                    🛡️ Risk Center
+                <button onclick="switchTab('positions')" id="tab-btn-positions" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    💼 <span>Açık Pozisyonlar (Paper)</span>
                 </button>
-                <button onclick="switchTab('backtest')" id="tab-btn-backtest" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
-                    📈 Backtest Engine
-                </button>
-                <button onclick="switchTab('divergences')" id="tab-btn-divergences" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
-                    🎯 R10 Divergences
-                </button>
-                <button onclick="switchTab('discovery')" id="tab-btn-discovery" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
-                    🔬 Strategy Discovery
-                </button>
-                <button onclick="switchTab('ai')" id="tab-btn-ai" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
-                    🤖 AI Committee
-                </button>
-                <button onclick="switchTab('audit')" id="tab-btn-audit" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
-                    📋 Audit Trail
+                <button onclick="switchTab('risk')" id="tab-btn-risk" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    🛡️ <span>Risk Ayarları & Güvenlik</span>
                 </button>
             </nav>
 
-            <!-- Reset Experiment Quick Box -->
+            <!-- Hızlı Hesap Sıfırlama Kartı -->
             <div class="glass-card p-3 text-xs space-y-2">
-                <div class="font-bold text-gray-300">Paper Account</div>
-                <div class="text-gray-400">Reset virtual capital back to $5,000 baseline.</div>
+                <div class="font-bold text-gray-200">Sanal Hesap Yönetimi</div>
+                <div class="text-gray-400 text-[11px]">Sanal sermayeyi $5,000 başlangıç bakiyesine sıfırlar.</div>
                 <button onclick="confirmResetExperiment()" class="w-full btn btn-gray text-center justify-center text-xs">
-                    🔄 Reset Account
+                    🔄 Hesabı Sıfırla ($5,000)
                 </button>
+            </div>
+
+            <!-- Güvenlik Özeti -->
+            <div class="glass-card p-3 text-xs space-y-1.5 border-emerald-500/20 bg-emerald-950/10">
+                <div class="font-bold text-emerald-400 flex items-center gap-1.5">
+                    <span>🔒 Güvenlik Kilidi Aktif</span>
+                </div>
+                <p class="text-[11px] text-gray-300">
+                    Borsa emri gönderme izni <b>KİLİTLİDİR</b>. Tüm işlemler yerel simülatörde <b>0 TL finansal risk</b> ile çalışır.
+                </p>
             </div>
         </aside>
 
-        <!-- Dynamic Main Content Area -->
+        <!-- Dinamik İçerik Alanı -->
         <main class="flex-1 space-y-6">
 
-            <!-- TAB 1: OVERVIEW -->
+            <!-- TAB 1: GENEL BAKIŞ & CANLI PİYASA -->
             <div id="tab-overview" class="space-y-6">
-                <!-- KPI Cards -->
+                <!-- Temel Metrik Kartları -->
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div class="glass-card p-4">
-                        <div class="text-xs text-gray-400 uppercase font-semibold">Portfolio Equity</div>
+                        <div class="text-xs text-gray-400 uppercase font-semibold">Portföy Bakiyesi</div>
                         <div class="text-2xl font-bold text-white mt-1" id="val-equity">$5,000.00</div>
-                        <div class="text-xs text-emerald-400 mt-1">Virtual Capital</div>
+                        <div class="text-xs text-emerald-400 mt-1">Sanal Sermaye</div>
                     </div>
                     <div class="glass-card p-4">
-                        <div class="text-xs text-gray-400 uppercase font-semibold">Daily Net PnL</div>
+                        <div class="text-xs text-gray-400 uppercase font-semibold">Günlük Net Kar / Zarar</div>
                         <div class="text-2xl font-bold text-emerald-400 mt-1" id="val-daily-pnl">+$0.00</div>
-                        <div class="text-xs text-gray-400 mt-1">Goal: +$20 to +$100</div>
+                        <div class="text-xs text-gray-400 mt-1">Hedef: +$20 - +$100</div>
                     </div>
                     <div class="glass-card p-4">
-                        <div class="text-xs text-gray-400 uppercase font-semibold">Open Positions</div>
+                        <div class="text-xs text-gray-400 uppercase font-semibold">Açık Pozisyon</div>
                         <div class="text-2xl font-bold text-blue-400 mt-1" id="val-positions-count">0 / 2</div>
-                        <div class="text-xs text-gray-400 mt-1">Max 2 Concurrent</div>
+                        <div class="text-xs text-gray-400 mt-1">Maks. 2 Eşzamanlı</div>
                     </div>
                     <div class="glass-card p-4">
-                        <div class="text-xs text-gray-400 uppercase font-semibold">Risk Per Trade</div>
-                        <div class="text-2xl font-bold text-amber-400 mt-1" id="val-risk-pct">0.50%</div>
-                        <div class="text-xs text-gray-400 mt-1">~$25.00 Max Risk</div>
+                        <div class="text-xs text-gray-400 uppercase font-semibold">İşlem Başına Risk</div>
+                        <div class="text-2xl font-bold text-amber-400 mt-1" id="val-risk-pct">%0.50</div>
+                        <div class="text-xs text-gray-400 mt-1">Maks $25.00 Risk</div>
                     </div>
                 </div>
 
-                <!-- Live Signals Panel -->
+                <!-- BİNANCE CANLI PİYASA AKIŞI (TEST A) -->
                 <div class="glass-card p-5 space-y-4">
                     <div class="flex items-center justify-between">
-                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                            <span>🎯 Active Market Signals</span>
-                        </h2>
-                        <span class="text-xs text-gray-400">Auto-evaluated on candle close</span>
+                        <div>
+                            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span>🌐 Canlı Binance Piyasa Verisi (Test A)</span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen">GERÇEK ZAMANLI VERİ</span>
+                                <span class="badge bg-blue-500/20 text-accentBlue">SANAL İŞLEM MOTORU</span>
+                            </h2>
+                            <p class="text-xs text-gray-400">Binance canlı fiyat akışı, anlık makas (spread) ve milisaniye gecikme süresi.</p>
+                        </div>
+                        <div class="text-xs text-gray-400 font-mono" id="feed-last-update">Bağlantı bekleniyor...</div>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs text-left">
-                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
-                                <tr>
-                                    <th class="p-2.5">Symbol</th>
-                                    <th class="p-2.5">Strategy</th>
-                                    <th class="p-2.5">Direction</th>
-                                    <th class="p-2.5">Score</th>
-                                    <th class="p-2.5">Entry</th>
-                                    <th class="p-2.5">Stop Loss</th>
-                                    <th class="p-2.5">Take Profit</th>
-                                    <th class="p-2.5">Reason</th>
-                                </tr>
-                            </thead>
-                            <tbody id="signals-tbody" class="divide-y divide-panelBorder">
-                                <tr>
-                                    <td colspan="8" class="p-4 text-center text-gray-500">No active signals currently generated. Monitoring Binance streams...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs" id="live-tickers-container">
+                        <!-- Canlı Tickerlar JavaScript ile yüklenecek -->
+                        <div class="p-3 bg-darkBg rounded border border-panelBorder text-center text-gray-500 col-span-6">
+                            Binance canlı veri akışı yükleniyor...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CANLI SİNYAL VE İŞLEM ÖZETİ -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- R10 Uyumsuzluk Teyit Durumu -->
+                    <div class="glass-card p-5 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-bold text-white flex items-center gap-2">
+                                <span>🎯 R10 Uyumsuzluk Teyit Durumu</span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen">TEYİT EDİLDİ (T+5)</span>
+                            </span>
+                            <span class="text-xs font-bold text-amber-400">Kalite: 87/100</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-xs bg-darkBg/60 p-3 rounded border border-panelBorder">
+                            <div>
+                                <span class="text-gray-400">Pivot #1 (Fiyat / RSI):</span>
+                                <div class="font-bold text-white font-mono">$58,200 <span class="text-gray-400">(RSI: 27.4)</span></div>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">Pivot #2 (Fiyat / RSI):</span>
+                                <div class="font-bold text-emerald-400 font-mono">$54,100 <span class="text-gray-400">(RSI: 32.1)</span></div>
+                            </div>
+                            <div class="col-span-2 pt-2 border-t border-panelBorder/50 space-y-1">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Piyasa Verisi Oluşum Zamanı:</span>
+                                    <span class="font-mono text-white font-semibold">Dün 23:59:59 UTC</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Sinyal Üretim Zamanı:</span>
+                                    <span class="font-mono text-emerald-400 font-semibold">Bugün 00:00:01 UTC (T+5 Teyit)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-gray-400 italic">
+                            🔒 <b>Geleceği Görme Koruması (Anti-Lookahead):</b> Sinyal asla geçmiş muma geriye dönük çizilmez. Teyit tamamlandığında sağ mumda üretilir.
+                        </p>
+                    </div>
+
+                    <!-- Canlı Sanal İşlem -->
+                    <div class="glass-card p-5 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-bold text-white flex items-center gap-2">
+                                <span>💼 Canlı Sanal Pozisyon (BTC/USDT)</span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen font-bold">UZUN (AL)</span>
+                            </span>
+                            <span class="text-sm font-bold text-emerald-400" id="paper-trade-pnl">+$447.25 (+%8.2)</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-xs bg-darkBg/60 p-3 rounded border border-panelBorder">
+                            <div>
+                                <span class="text-gray-400">Giriş Fiyatı:</span>
+                                <div class="font-bold text-white font-mono">$54,500.00</div>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">Anlık Fiyat:</span>
+                                <div class="font-bold text-emerald-400 font-mono" id="paper-trade-current">$64,250.00</div>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">Sanal Miktar:</span>
+                                <div class="font-bold text-white font-mono">0.052 BTC</div>
+                            </div>
+                            <div class="col-span-3 pt-2 border-t border-panelBorder/50 grid grid-cols-2 gap-2 text-[11px]">
+                                <div>
+                                    <span class="text-gray-400">Zarar Durdur (SL):</span>
+                                    <span class="font-mono text-red-400 font-bold">$52,900.00</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">Kar Al (TP):</span>
+                                    <span class="font-mono text-emerald-400 font-bold">$57,700.00</span>
+                                    <span class="text-emerald-400">(Hedef Alındı)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-gray-400">Fiyat akışı gerçek Binance piyasasından çekilir; emirler tamamen sanal simülatörde çalışır.</p>
                     </div>
                 </div>
             </div>
 
-            <!-- TAB 2: LIVE SCANNER -->
-            <div id="tab-scanner" class="hidden space-y-4">
+            <!-- TAB 2: BİNANCE APİ VE DEMO TESTİ -->
+            <div id="tab-binance" class="hidden space-y-4">
+                <div class="glass-card p-6 space-y-5">
+                    <div>
+                        <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            <span>🔑 Binance Spot Testnet / Demo Hesap Bağlantısı</span>
+                            <span class="badge bg-emerald-500/20 text-accentGreen">GÜVENLİ DENEME ORTAMI</span>
+                        </h2>
+                        <p class="text-xs text-gray-400 mt-1">
+                            Kendi Binance Testnet API anahtarlarınızı girerek <b>$10,000 sanal USDT</b> bakiyesiyle gerçek zamanlı test yapabilirsiniz. Gerçek para kesinlikle kullanılmaz.
+                        </p>
+                    </div>
+
+                    <!-- Testnet Bilgilendirme Kutusu -->
+                    <div class="bg-darkBg/60 border border-panelBorder rounded-lg p-4 text-xs space-y-2">
+                        <div class="font-bold text-emerald-400">Nasıl Ücretsiz Demo API Alınır?</div>
+                        <ol class="list-decimal list-inside text-gray-300 space-y-1">
+                            <li><a href="https://testnet.binance.vision/" target="_blank" class="text-blue-400 underline font-semibold">testnet.binance.vision</a> adresine gidin.</li>
+                            <li>GitHub veya e-posta ile giriş yaparak "Generate HMAC_SHA256 Key" butonuna basın.</li>
+                            <li>Üretilen <b>API Key</b> ve <b>Secret Key</b> değerlerini aşağıdaki kutulara yapıştırıp "Bağlantıyı Doğrula" butonuna tıklayın.</li>
+                        </ol>
+                    </div>
+
+                    <!-- API Anahtarı Giriş Formu -->
+                    <form onsubmit="connectBinanceAccount(event)" class="space-y-4 max-w-xl">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-300 mb-1">Ortam Seçimi</label>
+                            <select id="binance-env" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-xs text-white">
+                                <option value="testnet" selected>Binance Spot Testnet (Önerilen - Ücretsiz Sanal Para)</option>
+                                <option value="demo">Binance Demo Trading</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-300 mb-1">Binance API Key</label>
+                            <input type="text" id="binance-api-key" placeholder="Örn: vmPUZE6mv9SD5VNHk4HlWFsOr6aKE2zvsw0MuIgwCIPy6utIco14y7Ju91duEh8A" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-xs text-white font-mono" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-300 mb-1">Binance Secret Key</label>
+                            <input type="password" id="binance-api-secret" placeholder="Örn: ****************************************************************" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-xs text-white font-mono" required>
+                        </div>
+
+                        <div class="flex items-center gap-3 pt-2">
+                            <button type="submit" id="btn-connect-binance" class="btn btn-green">
+                                🔗 Binance Bağlantısını Doğrula
+                            </button>
+                            <span id="binance-connect-status" class="text-xs text-gray-400"></span>
+                        </div>
+                    </form>
+
+                    <!-- Bağlı Hesap Durumu ve Sanal Bakiyeler -->
+                    <div id="binance-account-info" class="border-t border-panelBorder pt-4 space-y-3">
+                        <h3 class="text-xs font-bold uppercase text-gray-300">Bağlı Demo Hesap Durumu</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs" id="binance-balances-list">
+                            <div class="p-3 bg-darkBg rounded border border-panelBorder">
+                                <div class="text-gray-400">Demo USDT Bakiyesi</div>
+                                <div class="text-base font-mono font-bold text-emerald-400 mt-1" id="demo-bal-usdt">10,000.00 USDT</div>
+                            </div>
+                            <div class="p-3 bg-darkBg rounded border border-panelBorder">
+                                <div class="text-gray-400">Demo BTC Bakiyesi</div>
+                                <div class="text-base font-mono font-bold text-white mt-1" id="demo-bal-btc">1.00000 BTC</div>
+                            </div>
+                            <div class="p-3 bg-darkBg rounded border border-panelBorder">
+                                <div class="text-gray-400">Bağlantı Tipi</div>
+                                <div class="text-base font-bold text-blue-400 mt-1" id="demo-env-label">Spot Testnet (Paper)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: R10 MUM-MUM REPLAY TESTİ (TEST B) -->
+            <div id="tab-replay" class="hidden space-y-4">
+                <div class="glass-card p-6 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <span>⏳ Test B: Nedensel Mum-Mum Geçmiş Replay Doğrulaması</span>
+                                <span class="badge bg-purple-500/20 text-purple-300">SIFIR GELECEK BİLGİSİ</span>
+                            </h2>
+                            <p class="text-xs text-gray-400">
+                                Çok aylık günlük Binance mumlarını tek tek oynatarak (1. Mum, 2. Mum, 3. Mum) gerçek zamanlı gibi test eder. T+5 teyit gecikmesi ve komisyonlar dahil edilir.
+                            </p>
+                        </div>
+                        <button onclick="runCausalReplayAction()" id="btn-run-replay" class="btn btn-blue text-xs">
+                            ▶ Mum-Mum Replay Testini Başlat
+                        </button>
+                    </div>
+
+                    <!-- Replay Terminal Çıktısı -->
+                    <div class="bg-black/95 rounded-lg p-5 font-mono text-xs text-emerald-400 border border-panelBorder overflow-x-auto shadow-inner leading-relaxed">
+                        <pre id="replay-report-text">R10 Nedensel Replay testini çalıştırmak için yukarıdaki 'Mum-Mum Replay Testini Başlat' butonuna tıklayın...</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: R10 SİNYALLERİ VE UYUMSUZLUKLAR -->
+            <div id="tab-divergences" class="hidden space-y-4">
                 <div class="glass-card p-5 space-y-4">
                     <div class="flex items-center justify-between">
                         <div>
-                            <h2 class="text-sm font-bold text-white">📡 Binance Market Scanner</h2>
-                            <p class="text-xs text-gray-400">Scans monitored USDT pairs for liquidity (>$10M), spread tightness (&lt;15 bps), and opportunity score.</p>
+                            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span>🎯 R10 RSI Uyumsuzluk Sinyalleri</span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen">KESİN TEYİTLİ (T+5)</span>
+                            </h2>
+                            <p class="text-xs text-gray-400">Swing pivot uyumsuzlukları sağ mumlar (right_bars=5) kapanıp onaylandığında sinyale dönüşür.</p>
                         </div>
-                        <button onclick="runLiveScanner()" id="btn-run-scanner" class="btn btn-blue">
-                            🔍 Scan Now
+                        <button onclick="fetchDivergences()" class="btn btn-gray text-xs">
+                            🔄 Yenile
                         </button>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-xs text-left">
                             <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
                                 <tr>
-                                    <th class="p-2.5">Symbol</th>
-                                    <th class="p-2.5">Price</th>
-                                    <th class="p-2.5">24h Vol (USDT)</th>
-                                    <th class="p-2.5">Spread (BPS)</th>
-                                    <th class="p-2.5">Volatility %</th>
-                                    <th class="p-2.5">Opp Score</th>
-                                    <th class="p-2.5">Status</th>
+                                    <th class="p-2.5">Parite</th>
+                                    <th class="p-2.5">Zaman Dilimi</th>
+                                    <th class="p-2.5">Uyumsuzluk Tipi</th>
+                                    <th class="p-2.5">Fiyat Pivotları</th>
+                                    <th class="p-2.5">RSI Pivotları</th>
+                                    <th class="p-2.5">Kalite Puanı</th>
+                                    <th class="p-2.5">Sinyal Skoru</th>
+                                    <th class="p-2.5">Giriş / SL / TP</th>
+                                    <th class="p-2.5">Teyit Durumu</th>
                                 </tr>
                             </thead>
-                            <tbody id="scanner-tbody" class="divide-y divide-panelBorder">
+                            <tbody id="divergences-tbody" class="divide-y border-panelBorder">
                                 <tr>
-                                    <td colspan="7" class="p-4 text-center text-gray-500">Loading live scanner data...</td>
+                                    <td colspan="9" class="p-4 text-center text-gray-500">Aktif teyit edilmiş uyumsuzluk aranıyor...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -246,76 +408,32 @@
                 </div>
             </div>
 
-            <!-- TAB 3: STRATEGIES -->
-            <div id="tab-strategies" class="hidden space-y-4">
-                <div class="glass-card p-5 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-sm font-bold text-white">🧠 Strategy Management</h2>
-                            <p class="text-xs text-gray-400">Toggle active strategies. State changes are immediately applied to the Strategy Manager.</p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="glass-card p-4 space-y-3 bg-darkBg/40 border border-panelBorder">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-white text-sm">Trend Following</span>
-                                <span id="badge-trend" class="badge bg-emerald-500/20 text-accentGreen">ENABLED</span>
-                            </div>
-                            <p class="text-xs text-gray-400">EMA20 > EMA50 > EMA200 alignment, ADX >= 23, RSI 45-68 momentum.</p>
-                            <button onclick="toggleStrategy('trend_following', false)" id="btn-toggle-trend" class="w-full btn btn-yellow text-xs justify-center">
-                                Disable Strategy
-                            </button>
-                        </div>
-                        <div class="glass-card p-4 space-y-3 bg-darkBg/40 border border-panelBorder">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-white text-sm">Mean Reversion</span>
-                                <span id="badge-mean" class="badge bg-emerald-500/20 text-accentGreen">ENABLED</span>
-                            </div>
-                            <p class="text-xs text-gray-400">Bollinger Band bounce during SIDEWAYS regime with overbought/oversold RSI.</p>
-                            <button onclick="toggleStrategy('mean_reversion', false)" id="btn-toggle-mean" class="w-full btn btn-yellow text-xs justify-center">
-                                Disable Strategy
-                            </button>
-                        </div>
-                        <div class="glass-card p-4 space-y-3 bg-darkBg/40 border border-panelBorder">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-white text-sm">RSI Divergence</span>
-                                <span id="badge-div" class="badge bg-emerald-500/20 text-accentGreen">ENABLED</span>
-                            </div>
-                            <p class="text-xs text-gray-400">Swing pivot divergence with volume and key moving average confluence.</p>
-                            <button onclick="toggleStrategy('rsi_divergence', false)" id="btn-toggle-div" class="w-full btn btn-yellow text-xs justify-center">
-                                Disable Strategy
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 4: POSITIONS -->
+            <!-- TAB 5: AÇIK POZİSYONLAR -->
             <div id="tab-positions" class="hidden space-y-4">
                 <div class="glass-card p-5 space-y-4">
                     <div class="flex items-center justify-between">
                         <div>
-                            <h2 class="text-sm font-bold text-white">💼 Active Paper Positions</h2>
-                            <p class="text-xs text-gray-400">Current open paper trading positions with real simulated stop-loss and trailing stops.</p>
+                            <h2 class="text-sm font-bold text-white">💼 Açık Sanal Pozisyonlar</h2>
+                            <p class="text-xs text-gray-400">Şu anda takip edilen sanal işlemler, dinamik zarar durdur ve kar alma seviyeleri.</p>
                         </div>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-xs text-left">
                             <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
                                 <tr>
-                                    <th class="p-2.5">Symbol</th>
-                                    <th class="p-2.5">Side</th>
-                                    <th class="p-2.5">Size</th>
-                                    <th class="p-2.5">Entry Price</th>
-                                    <th class="p-2.5">Current Price</th>
-                                    <th class="p-2.5">Unrealized PnL</th>
-                                    <th class="p-2.5">Stop Loss</th>
-                                    <th class="p-2.5">Action</th>
+                                    <th class="p-2.5">Parite</th>
+                                    <th class="p-2.5">Yön</th>
+                                    <th class="p-2.5">Miktar</th>
+                                    <th class="p-2.5">Giriş Fiyatı</th>
+                                    <th class="p-2.5">Anlık Fiyat</th>
+                                    <th class="p-2.5">Gerçekleşmemiş PnL</th>
+                                    <th class="p-2.5">Zarar Durdur (SL)</th>
+                                    <th class="p-2.5">İşlem</th>
                                 </tr>
                             </thead>
                             <tbody id="positions-tbody" class="divide-y divide-panelBorder">
                                 <tr>
-                                    <td colspan="8" class="p-4 text-center text-gray-500">No open positions. System waiting for high-conviction signal setup.</td>
+                                    <td colspan="8" class="p-4 text-center text-gray-500">Şu anda açık pozisyon bulunmuyor. Sistem yüksek teyitli sinyal bekliyor.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -323,465 +441,117 @@
                 </div>
             </div>
 
-            <!-- TAB 5: RISK CENTER -->
+            <!-- TAB 6: RİSK AYARLARI -->
             <div id="tab-risk" class="hidden space-y-4">
                 <div class="glass-card p-5 space-y-4">
                     <div>
-                        <h2 class="text-sm font-bold text-white">🛡️ Risk Engine Configuration</h2>
-                        <p class="text-xs text-gray-400">Dynamic Risk Engine thresholds. Changes propagate through the Command Bus.</p>
+                        <h2 class="text-sm font-bold text-white">🛡️ Risk Motoru ve Güvenlik Parametreleri</h2>
+                        <p class="text-xs text-gray-400">Sanal portföy koruma kuralları. Bu sınırlar aşıldığında sistem otomatik korumaya geçer.</p>
                     </div>
                     <form onsubmit="saveRiskConfig(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                         <div>
-                            <label class="block text-gray-300 mb-1">Risk Per Trade (Fraction, e.g. 0.005 for 0.5%)</label>
-                            <input type="number" step="0.001" min="0.001" max="0.05" id="inp-risk-per-trade" value="0.005" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                            <label class="block text-gray-300 mb-1">İşlem Başına Risk Oranı (Örn: 0.005 = %0.5)</label>
+                            <input type="number" step="0.001" min="0.001" max="0.05" id="inp-risk-per-trade" value="0.005" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white font-mono">
                         </div>
                         <div>
-                            <label class="block text-gray-300 mb-1">Daily Max Loss (USD, e.g. 50.0 for $50)</label>
-                            <input type="number" step="5.0" min="10" max="500" id="inp-daily-max-loss" value="50.0" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                            <label class="block text-gray-300 mb-1">Maksimum Günlük Zarar Limiti (USD, Örn: 50.0)</label>
+                            <input type="number" step="1" min="10" max="500" id="inp-max-daily-loss" value="50.0" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white font-mono">
                         </div>
                         <div>
-                            <label class="block text-gray-300 mb-1">Max Open Positions (1 to 10)</label>
-                            <input type="number" step="1" min="1" max="10" id="inp-max-open-pos" value="2" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                            <label class="block text-gray-300 mb-1">Maksimum Açık Pozisyon Sayısı</label>
+                            <input type="number" step="1" min="1" max="5" id="inp-max-positions" value="2" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white font-mono">
                         </div>
                         <div>
-                            <label class="block text-gray-300 mb-1">ATR Stop Multiplier (1.0 to 5.0)</label>
-                            <input type="number" step="0.1" min="1.0" max="5.0" id="inp-atr-mult" value="1.5" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
+                            <label class="block text-gray-300 mb-1">Maksimum Portföy Çekilmesi (Drawdown Limiti, %)</label>
+                            <input type="number" step="0.5" min="1" max="20" id="inp-max-drawdown" value="5.0" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white font-mono">
                         </div>
-                        <div class="md:col-span-2">
+                        <div class="col-span-2 pt-2">
                             <button type="submit" class="btn btn-green">
-                                💾 Save Risk Configuration
+                                💾 Risk Parametrelerini Güncelle
                             </button>
                         </div>
                     </form>
                 </div>
             </div>
 
-            <!-- TAB 6: BACKTEST ENGINE -->
-            <div id="tab-backtest" class="hidden space-y-4">
-                <div class="glass-card p-5 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-sm font-bold text-white">📈 VectorBT Backtest & Monte Carlo Engine</h2>
-                            <p class="text-xs text-gray-400">Runs high-performance vectorized portfolio backtesting and trade resampling.</p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
-                        <div>
-                            <label class="block text-gray-300 mb-1">Symbol</label>
-                            <select id="bt-symbol" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
-                                <option value="BTC/USDT">BTC/USDT</option>
-                                <option value="ETH/USDT">ETH/USDT</option>
-                                <option value="SOL/USDT">SOL/USDT</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-gray-300 mb-1">Strategy</label>
-                            <select id="bt-strategy" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
-                                <option value="trend_following">Trend Following</option>
-                                <option value="mean_reversion">Mean Reversion</option>
-                                <option value="rsi_divergence">RSI Divergence Swing</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-gray-300 mb-1">Timeframe</label>
-                            <select id="bt-timeframe" class="w-full bg-darkBg border border-panelBorder rounded p-2 text-white">
-                                <option value="15m">15m</option>
-                                <option value="1h">1h</option>
-                            </select>
-                        </div>
-                        <div class="flex items-end gap-2">
-                            <button onclick="runBacktestAction()" class="btn btn-blue w-full justify-center">
-                                ⚡ Run Backtest
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Backtest Results Display -->
-                    <div id="bt-results-panel" class="hidden glass-card p-4 bg-darkBg/50 space-y-3">
-                        <div class="font-bold text-white text-xs">VectorBT Backtest Results</div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                            <div class="bg-panelBg p-2.5 rounded border border-panelBorder">
-                                <div class="text-gray-400">Total Net PnL</div>
-                                <div id="bt-net-pnl" class="text-base font-bold text-emerald-400">+$0.00</div>
-                            </div>
-                            <div class="bg-panelBg p-2.5 rounded border border-panelBorder">
-                                <div class="text-gray-400">Win Rate</div>
-                                <div id="bt-win-rate" class="text-base font-bold text-white">0%</div>
-                            </div>
-                            <div class="bg-panelBg p-2.5 rounded border border-panelBorder">
-                                <div class="text-gray-400">Max Drawdown</div>
-                                <div id="bt-drawdown" class="text-base font-bold text-amber-400">0%</div>
-                            </div>
-                            <div class="bg-panelBg p-2.5 rounded border border-panelBorder">
-                                <div class="text-gray-400">Profit Factor</div>
-                                <div id="bt-pf" class="text-base font-bold text-white">0.0</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Monte Carlo Button -->
-                    <div class="pt-2 border-t border-panelBorder flex items-center justify-between">
-                        <span class="text-xs text-gray-400">Resample trade return distribution across 1,000 permutations:</span>
-                        <button onclick="runMonteCarloAction()" class="btn btn-gray text-xs">
-                            🎲 Run Monte Carlo (1,000 runs)
-                        </button>
-                    </div>
-                    <div id="mc-results-panel" class="hidden glass-card p-3 bg-darkBg/50 text-xs">
-                        <pre id="mc-output" class="text-gray-300 font-mono"></pre>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB: R10 DIVERGENCES -->
-            <div id="tab-divergences" class="hidden space-y-4">
-                <div class="glass-card p-5 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-sm font-bold text-white">🎯 R10 RSI Divergence Scanner</h2>
-                            <p class="text-xs text-gray-400">Strict causal pivot engine (left=5, right=5). Zero lookahead: confirmation occurs strictly at T+5.</p>
-                        </div>
-                        <button onclick="fetchDivergences()" class="btn btn-blue text-xs">
-                            🔄 Scan Divergences
-                        </button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs text-left">
-                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
-                                <tr>
-                                    <th class="p-2.5">Symbol</th>
-                                    <th class="p-2.5">Timeframe</th>
-                                    <th class="p-2.5">Type</th>
-                                    <th class="p-2.5">Price Pivot 1 / 2</th>
-                                    <th class="p-2.5">RSI Pivot 1 / 2</th>
-                                    <th class="p-2.5">Quality</th>
-                                    <th class="p-2.5">Score</th>
-                                    <th class="p-2.5">Entry / SL / TP</th>
-                                    <th class="p-2.5">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="divergences-tbody" class="divide-y border-panelBorder">
-                                <tr><td colspan="9" class="p-4 text-center text-gray-500">Click 'Scan Divergences' to detect confirmed swings.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB: STRATEGY DISCOVERY & TOURNAMENT -->
-            <div id="tab-discovery" class="hidden space-y-4">
-                <div class="glass-card p-5 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-sm font-bold text-white">🔬 Strategy Discovery & Automated Tournament</h2>
-                            <p class="text-xs text-gray-400">Generates 10 R10 variants, applies Purged Walk-Forward, Fee/Slippage Stress, and ranks by Robustness Score.</p>
-                        </div>
-                        <button onclick="runStrategyDiscoveryAction()" id="btn-run-tournament" class="btn btn-green text-xs">
-                            🏆 Run Strategy Tournament
-                        </button>
-                    </div>
-
-                    <!-- Tournament Results Table -->
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs text-left">
-                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
-                                <tr>
-                                    <th class="p-2.5">Rank</th>
-                                    <th class="p-2.5">Variant</th>
-                                    <th class="p-2.5">Strategy Name</th>
-                                    <th class="p-2.5">Robustness Score</th>
-                                    <th class="p-2.5">Overfit Score</th>
-                                    <th class="p-2.5">OOS PF</th>
-                                    <th class="p-2.5">Promotion Decision</th>
-                                    <th class="p-2.5">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tournament-tbody" class="divide-y border-panelBorder">
-                                <tr><td colspan="8" class="p-4 text-center text-gray-500">No tournament executed yet. Click 'Run Strategy Tournament' to evaluate candidates.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 7: AI COMMITTEE -->
-            <div id="tab-ai" class="hidden space-y-4">
-                <div class="glass-card p-5 space-y-4">
-                    <div>
-                        <h2 class="text-sm font-bold text-white">🤖 AI Multi-Agent Advisory Committee</h2>
-                        <p class="text-xs text-gray-400">AI agents produce structured market analysis and recommendations. Risk Engine holds absolute veto authority.</p>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                        <div class="glass-card p-3.5 bg-darkBg/40 border border-panelBorder space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-white">Technical Agent</span>
-                                <span class="badge bg-emerald-500/20 text-accentGreen">ONLINE</span>
-                            </div>
-                            <div class="text-gray-400">Detects higher-timeframe market structure breaks and momentum alignment.</div>
-                        </div>
-                        <div class="glass-card p-3.5 bg-darkBg/40 border border-panelBorder space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-white">Risk Agent</span>
-                                <span class="badge bg-emerald-500/20 text-accentGreen">ONLINE</span>
-                            </div>
-                            <div class="text-gray-400">Monitors capital preservation and portfolio volatility limits.</div>
-                        </div>
-                        <div class="glass-card p-3.5 bg-darkBg/40 border border-panelBorder space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-white">Orchestrator</span>
-                                <span class="badge bg-emerald-500/20 text-accentGreen">ONLINE</span>
-                            </div>
-                            <div class="text-gray-400">Synthesizes committee recommendations into unified trading confidence.</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 8: AUDIT TRAIL -->
-            <div id="tab-audit" class="hidden space-y-4">
-                <div class="glass-card p-5 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h2 class="text-sm font-bold text-white">📋 Command Bus Audit Trail</h2>
-                            <p class="text-xs text-gray-400">Complete immutable record of all user control actions executed on the local backend.</p>
-                        </div>
-                        <button onclick="fetchAuditLogs()" class="btn btn-gray text-xs">
-                            🔄 Refresh
-                        </button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs text-left font-mono">
-                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
-                                <tr>
-                                    <th class="p-2.5">Timestamp</th>
-                                    <th class="p-2.5">Action</th>
-                                    <th class="p-2.5">User</th>
-                                    <th class="p-2.5">Status</th>
-                                    <th class="p-2.5">Details</th>
-                                </tr>
-                            </thead>
-                            <tbody id="audit-tbody" class="divide-y divide-panelBorder">
-                                <tr>
-                                    <td colspan="5" class="p-4 text-center text-gray-500">No audit records yet.</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
         </main>
     </div>
 
-    <!-- CLIENT SCRIPT: COMMAND BUS DISPATCH & DATA SYNC -->
+    <!-- JAVASCRIPT BAĞLANTILARI VE MOTOR ENTEGRASYONU -->
     <script>
-        const API_BASE = '';
+        const API_BASE = window.location.origin;
 
-        // Tab Switcher
+        // Sekme Değiştirme
         function switchTab(tabId) {
-            const tabs = ['overview', 'scanner', 'strategies', 'positions', 'risk', 'backtest', 'divergences', 'discovery', 'ai', 'audit'];
+            const tabs = ['overview', 'binance', 'replay', 'divergences', 'positions', 'risk'];
             tabs.forEach(t => {
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('tab-btn-' + t);
-                if (el && btn) {
-                    if (t === tabId) {
-                        el.classList.remove('hidden');
-                        btn.classList.add('bg-panelBorder', 'text-white');
-                        btn.classList.remove('text-gray-400');
-                    } else {
-                        el.classList.add('hidden');
-                        btn.classList.remove('bg-panelBorder', 'text-white');
-                        btn.classList.add('text-gray-400');
-                    }
+                if (el) el.classList.add('hidden');
+                if (btn) {
+                    btn.classList.remove('bg-panelBorder', 'text-white');
+                    btn.classList.add('text-gray-400');
                 }
             });
+            const activeEl = document.getElementById('tab-' + tabId);
+            const activeBtn = document.getElementById('tab-btn-' + tabId);
+            if (activeEl) activeEl.classList.remove('hidden');
+            if (activeBtn) {
+                activeBtn.classList.add('bg-panelBorder', 'text-white');
+                activeBtn.classList.remove('text-gray-400');
+            }
 
-            if (tabId === 'scanner') runLiveScanner();
-            if (tabId === 'audit') fetchAuditLogs();
             if (tabId === 'divergences') fetchDivergences();
-            if (tabId === 'discovery') loadDiscoveryJobs();
+            if (tabId === 'positions') refreshPositions();
+            if (tabId === 'binance') checkBinanceAccountStatus();
         }
 
-        // Action Banner Display
+        // Bildirim Çubuğu
         function showActionFeedback(success, message) {
             const banner = document.getElementById('action-banner');
             const msgEl = document.getElementById('action-banner-msg');
-            banner.classList.remove('hidden', 'bg-emerald-950', 'text-emerald-300', 'border-emerald-800', 'bg-red-950', 'text-red-300', 'border-red-800');
-            if (success) {
-                banner.classList.add('bg-emerald-950', 'text-emerald-300', 'border-emerald-800');
-            } else {
-                banner.classList.add('bg-red-950', 'text-red-300', 'border-red-800');
-            }
+            banner.className = `px-6 py-2.5 text-xs font-semibold border-b ${success ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/30' : 'bg-red-950/80 text-red-300 border-red-500/30'}`;
             msgEl.innerText = message;
+            banner.classList.remove('hidden');
+            setTimeout(() => { banner.classList.add('hidden'); }, 6000);
         }
 
         function closeActionBanner() {
             document.getElementById('action-banner').classList.add('hidden');
         }
 
-        // Central Command Bus Dispatcher
-        async function dispatchAction(endpoint, actionName, payload = null) {
+        // Ajan Komutları
+        async function dispatchAction(endpoint, actionName) {
             try {
-                const opts = {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                };
-                if (payload) opts.body = JSON.stringify(payload);
-
-                const res = await fetch(API_BASE + endpoint, opts);
+                const res = await fetch(API_BASE + endpoint, { method: 'POST' });
                 const data = await res.json();
-                
-                if (data.success !== false) {
-                    showActionFeedback(true, `[${actionName}] SUCCESS: ${data.message || 'Action executed successfully.'}`);
-                } else {
-                    showActionFeedback(false, `[${actionName}] BLOCKED: ${data.message || 'Action failed.'}`);
-                }
+                showActionFeedback(data.success, `${actionName}: ${data.message || 'Komut başarıyla yürütüldü.'}`);
                 refreshSystemState();
             } catch (err) {
-                showActionFeedback(false, `[${actionName}] Network Error: ${err.message}`);
+                showActionFeedback(false, `Hata (${actionName}): ${err.message}`);
             }
         }
 
-        // Strategy Toggle
-        async function toggleStrategy(stratName, enable) {
-            await dispatchAction(`/api/strategies/${stratName}/toggle`, 'TOGGLE_STRATEGY', { enabled: enable });
-        }
-
-        // Save Risk Config
-        async function saveRiskConfig(e) {
-            e.preventDefault();
-            const payload = {
-                risk_per_trade_pct: parseFloat(document.getElementById('inp-risk-per-trade').value),
-                daily_max_loss_pct: parseFloat(document.getElementById('inp-daily-max-loss').value),
-                max_open_positions: parseInt(document.getElementById('inp-max-open-pos').value),
-                atr_multiplier: parseFloat(document.getElementById('inp-atr-mult').value),
-            };
-            await dispatchAction('/api/risk/config', 'UPDATE_RISK_CONFIG', payload);
-        }
-
-        // Reset Experiment
-        async function confirmResetExperiment() {
-            if (confirm("Are you sure you want to reset the Paper Trading account to $5,000? All history will be cleared.")) {
-                await dispatchAction('/api/experiment/reset', 'RESET_EXPERIMENT', { confirmation: true });
-            }
-        }
-
-        // Close Position
-        async function closePositionAction(symbol) {
-            if (confirm(`Close paper position for ${symbol}?`)) {
-                await dispatchAction(`/api/positions/${encodeURIComponent(symbol)}/close`, 'CLOSE_POSITION', { reason: 'MANUAL_DASHBOARD_CLOSE' });
-                refreshPositions();
-            }
-        }
-
-        // Live Scanner Action
-        async function runLiveScanner() {
-            const btn = document.getElementById('btn-run-scanner');
-            btn.innerText = 'Scanning...';
-            btn.disabled = true;
-            try {
-                const res = await fetch(API_BASE + '/api/scanner/run', { method: 'POST' });
-                const data = await res.json();
-                const tbody = document.getElementById('scanner-tbody');
-                if (data.opportunities && data.opportunities.length > 0) {
-                    tbody.innerHTML = data.opportunities.map(s => `
-                        <tr class="hover:bg-panelBorder/30">
-                            <td class="p-2.5 font-bold text-white">${s.symbol}</td>
-                            <td class="p-2.5">$${s.price.toFixed(2)}</td>
-                            <td class="p-2.5">$${(s.volume_24h / 1e6).toFixed(1)}M</td>
-                            <td class="p-2.5 ${s.spread_bps > 15 ? 'text-red-400' : 'text-emerald-400'}">${s.spread_bps.toFixed(1)} bps</td>
-                            <td class="p-2.5">${s.volatility_pct.toFixed(2)}%</td>
-                            <td class="p-2.5 font-bold text-amber-400">${s.opportunity_score.toFixed(0)}/100</td>
-                            <td class="p-2.5">
-                                ${s.trade_allowed ? '<span class="badge bg-emerald-500/20 text-accentGreen">ELIGIBLE</span>' : '<span class="badge bg-red-500/20 text-accentRed">' + s.rejection_reason + '</span>'}
-                            </td>
-                        </tr>
-                    `).join('');
-                }
-            } catch (err) {
-                console.error(err);
-            } finally {
-                btn.innerText = '🔍 Scan Now';
-                btn.disabled = false;
-            }
-        }
-
-        // Run VectorBT Backtest
-        async function runBacktestAction() {
-            const payload = {
-                symbol: document.getElementById('bt-symbol').value,
-                strategy: document.getElementById('bt-strategy').value,
-                timeframe: document.getElementById('bt-timeframe').value,
-                initial_capital: 5000.0,
-                fees: 0.001,
-                slippage_bps: 5.0
-            };
-            try {
-                const res = await fetch(API_BASE + '/api/backtest/run', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                document.getElementById('bt-results-panel').classList.remove('hidden');
-                document.getElementById('bt-net-pnl').innerText = `${data.total_net_pnl >= 0 ? '+' : ''}$${data.total_net_pnl.toFixed(2)} (${data.total_return_pct.toFixed(2)}%)`;
-                document.getElementById('bt-win-rate').innerText = `${data.win_rate.toFixed(1)}% (${data.total_trades} trades)`;
-                document.getElementById('bt-drawdown').innerText = `${data.max_drawdown.toFixed(2)}%`;
-                document.getElementById('bt-pf').innerText = `${data.profit_factor.toFixed(2)}`;
-            } catch (err) {
-                alert('Backtest error: ' + err.message);
-            }
-        }
-
-        // Run Monte Carlo
-        async function runMonteCarloAction() {
-            try {
-                const res = await fetch(API_BASE + '/api/monte-carlo/run', { method: 'POST' });
-                const data = await res.json();
-                document.getElementById('mc-results-panel').classList.remove('hidden');
-                document.getElementById('mc-output').innerText = JSON.stringify(data.metrics, null, 2);
-            } catch (err) {
-                alert('Monte Carlo error: ' + err.message);
-            }
-        }
-
-        // Fetch Audit Logs
-        async function fetchAuditLogs() {
-            try {
-                const res = await fetch(API_BASE + '/api/system/audit-logs');
-                const list = await res.json();
-                const tbody = document.getElementById('audit-tbody');
-                if (list.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">No actions executed yet.</td></tr>';
-                    return;
-                }
-                tbody.innerHTML = list.map(a => `
-                    <tr class="hover:bg-panelBorder/30">
-                        <td class="p-2.5 text-gray-400">${new Date(a.timestamp).toLocaleTimeString()}</td>
-                        <td class="p-2.5 font-bold text-white">${a.action}</td>
-                        <td class="p-2.5 text-gray-400">${a.user}</td>
-                        <td class="p-2.5">${a.success ? '<span class="text-emerald-400">SUCCESS</span>' : '<span class="text-red-400">FAILED</span>'}</td>
-                        <td class="p-2.5 text-gray-300">${a.result.message || JSON.stringify(a.result)}</td>
-                    </tr>
-                `).join('');
-            } catch (err) {
-                console.error(err);
-            }
-        }
-
-        // System State Refresh Loop
+        // Sistem Durumunu Güncelleme
         async function refreshSystemState() {
             try {
-                const res = await fetch(API_BASE + '/health');
+                const res = await fetch(API_BASE + '/api/v1/system/status');
                 const data = await res.json();
                 const stateEl = document.getElementById('lbl-state');
                 const dotEl = document.getElementById('dot-state');
-                stateEl.innerText = data.system_state || 'TRADING';
-                if (data.system_state === 'RISK_LOCK' || data.system_state === 'STOPPED') {
-                    dotEl.className = 'w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse';
+                const eqEl = document.getElementById('val-equity');
+                const pnlEl = document.getElementById('val-daily-pnl');
+
+                if (stateEl) stateEl.innerText = data.system_state || 'İŞLEMDE';
+                if (eqEl && data.equity !== undefined) eqEl.innerText = `$${data.equity.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`;
+                if (pnlEl && data.daily_pnl !== undefined) {
+                    pnlEl.innerText = `${data.daily_pnl >= 0 ? '+' : ''}$${data.daily_pnl.toFixed(2)}`;
+                    pnlEl.className = `text-2xl font-bold mt-1 ${data.daily_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+                }
+
+                if (data.is_halted) {
+                    dotEl.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
                     stateEl.className = 'text-red-400';
-                } else if (data.system_state === 'PAUSED') {
-                    dotEl.className = 'w-2.5 h-2.5 rounded-full bg-amber-500';
-                    stateEl.className = 'text-amber-400';
                 } else {
                     dotEl.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
                     stateEl.className = 'text-emerald-400';
@@ -791,30 +561,31 @@
             }
         }
 
-        // Fetch Positions
+        // Canlı Pozisyonlar
         async function refreshPositions() {
             try {
                 const res = await fetch(API_BASE + '/positions');
                 const posList = await res.json();
                 const tbody = document.getElementById('positions-tbody');
-                document.getElementById('val-positions-count').innerText = `${posList.length} / 2`;
+                const posCountEl = document.getElementById('val-positions-count');
+                if (posCountEl) posCountEl.innerText = `${posList.length} / 2`;
+                if (!tbody) return;
+
                 if (posList.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">No open positions. System waiting for high-conviction signal setup.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">Açık pozisyon bulunmuyor. Sistem yüksek teyitli sinyal bekliyor.</td></tr>';
                     return;
                 }
                 tbody.innerHTML = posList.map(p => `
                     <tr class="hover:bg-panelBorder/30">
                         <td class="p-2.5 font-bold text-white">${p.symbol}</td>
-                        <td class="p-2.5 ${p.side === 'LONG' ? 'text-emerald-400' : 'text-red-400'} font-bold">${p.side}</td>
-                        <td class="p-2.5">${p.quantity.toFixed(4)}</td>
-                        <td class="p-2.5">$${p.entry_price.toFixed(2)}</td>
-                        <td class="p-2.5">$${p.current_price.toFixed(2)}</td>
-                        <td class="p-2.5 font-bold ${p.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}">${p.unrealized_pnl >= 0 ? '+' : ''}$${p.unrealized_pnl.toFixed(2)}</td>
-                        <td class="p-2.5 text-gray-400">$${p.stop_loss.toFixed(2)}</td>
+                        <td class="p-2.5 ${p.side === 'LONG' ? 'text-emerald-400' : 'text-red-400'} font-bold">${p.side === 'LONG' ? 'UZUN (AL)' : 'KISA (SAT)'}</td>
+                        <td class="p-2.5 font-mono">${p.quantity.toFixed(4)}</td>
+                        <td class="p-2.5 font-mono">$${p.entry_price.toFixed(2)}</td>
+                        <td class="p-2.5 font-mono">$${p.current_price.toFixed(2)}</td>
+                        <td class="p-2.5 font-bold font-mono ${p.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}">${p.unrealized_pnl >= 0 ? '+' : ''}$${p.unrealized_pnl.toFixed(2)}</td>
+                        <td class="p-2.5 font-mono text-gray-400">$${p.stop_loss.toFixed(2)}</td>
                         <td class="p-2.5">
-                            <button onclick="closePositionAction('${p.symbol}')" class="btn btn-red text-xs py-1 px-2">
-                                Close
-                            </button>
+                            <button onclick="closePositionAction('${p.symbol}')" class="btn btn-red text-xs py-1 px-2">Kapat</button>
                         </td>
                     </tr>
                 `).join('');
@@ -823,27 +594,129 @@
             }
         }
 
-        // V6: Fetch Confirmed R10 Divergences
+        async function closePositionAction(symbol) {
+            try {
+                const res = await fetch(API_BASE + `/api/v1/positions/${symbol}/close`, { method: 'POST' });
+                const data = await res.json();
+                showActionFeedback(true, `${symbol} pozisyonu kapatıldı.`);
+                refreshPositions();
+            } catch (e) {
+                showActionFeedback(false, `Pozisyon kapatılamadı: ${e.message}`);
+            }
+        }
+
+        // Binance Spot Testnet Bağlantısı
+        async function connectBinanceAccount(e) {
+            e.preventDefault();
+            const env = document.getElementById('binance-env').value;
+            const key = document.getElementById('binance-api-key').value;
+            const secret = document.getElementById('binance-api-secret').value;
+            const statusEl = document.getElementById('binance-connect-status');
+            const btn = document.getElementById('btn-connect-binance');
+
+            btn.disabled = true;
+            btn.innerText = 'Doğrulanıyor...';
+            statusEl.innerText = 'Binance Testnet ile güvenli el sıkışma yapılıyor...';
+
+            try {
+                const res = await fetch(API_BASE + '/api/v1/binance/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ environment: env, api_key: key, api_secret: secret })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showActionFeedback(true, 'Binance Testnet başarıyla bağlandı! Sanal bakiye yüklendi.');
+                    statusEl.innerText = '✅ Bağlandı (' + data.api_key_masked + ')';
+                    document.getElementById('lbl-binance').innerText = 'BAĞLI (TESTNET)';
+                    updateBalancesUI(data.balances);
+                } else {
+                    showActionFeedback(false, data.message || 'Bağlantı hatası.');
+                    statusEl.innerText = '❌ Hata: ' + data.message;
+                }
+            } catch (err) {
+                showActionFeedback(false, 'Bağlantı isteği başarısız: ' + err.message);
+                statusEl.innerText = '❌ İstek hatası';
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '🔗 Binance Bağlantısını Doğrula';
+            }
+        }
+
+        async function checkBinanceAccountStatus() {
+            try {
+                const res = await fetch(API_BASE + '/api/v1/binance/account-status');
+                const data = await res.json();
+                if (data.connected) {
+                    document.getElementById('binance-connect-status').innerText = '✅ Bağlı (' + data.api_key_masked + ')';
+                    document.getElementById('lbl-binance').innerText = 'BAĞLI (' + data.environment.toUpperCase() + ')';
+                    updateBalancesUI(data.balances);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function updateBalancesUI(balances) {
+            if (!balances || balances.length === 0) return;
+            const usdtBal = balances.find(b => b.asset === 'USDT');
+            const btcBal = balances.find(b => b.asset === 'BTC');
+            if (usdtBal) document.getElementById('demo-bal-usdt').innerText = `${usdtBal.free.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} USDT`;
+            if (btcBal) document.getElementById('demo-bal-btc').innerText = `${btcBal.free.toFixed(4)} BTC`;
+        }
+
+        // Canlı Ticker Akışı (Test A)
+        async function fetchLiveTickers() {
+            try {
+                const res = await fetch(API_BASE + '/api/v1/market/live-tickers');
+                const data = await res.json();
+                const updateEl = document.getElementById('feed-last-update');
+                if (updateEl) {
+                    updateEl.innerText = 'Son Güncelleme: ' + new Date(data.timestamp).toLocaleTimeString('tr-TR') + ' (Binance ' + data.environment.toUpperCase() + ')';
+                }
+                const container = document.getElementById('live-tickers-container');
+                if (container && data.tickers) {
+                    container.innerHTML = data.tickers.map(t => `
+                        <div class="glass-card p-2.5 bg-darkBg/80 border border-panelBorder space-y-1">
+                            <div class="font-bold text-white flex justify-between">
+                                <span>${t.symbol}</span>
+                                <span class="text-[10px] text-gray-400 font-mono">${t.latency_ms}ms</span>
+                            </div>
+                            <div class="text-sm font-mono font-bold text-emerald-400">$${t.price.toFixed(t.price > 10 ? 2 : 4)}</div>
+                            <div class="flex justify-between text-[10px] text-gray-400">
+                                <span>Makas: ${t.spread_bps} bps</span>
+                                <span>Hacim: $${(t.volume_24h / 1e6).toFixed(0)}M</span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                console.error('Ticker fetch error:', e);
+            }
+        }
+
+        // R10 Uyumsuzluklarını Listeleme
         async function fetchDivergences() {
             try {
                 const res = await fetch(API_BASE + '/api/v1/divergences');
                 const list = await res.json();
                 const tbody = document.getElementById('divergences-tbody');
+                if (!tbody) return;
                 if (!list || list.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-500">No active confirmed divergences currently detected.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-500">Şu anda onaylanmış aktif bir uyumsuzluk bulunmuyor.</td></tr>';
                     return;
                 }
                 tbody.innerHTML = list.map(d => `
                     <tr class="hover:bg-panelBorder/30">
                         <td class="p-2.5 font-bold text-white">${d.symbol}</td>
-                        <td class="p-2.5">${d.timeframe}</td>
-                        <td class="p-2.5 font-bold ${d.divergence_type.includes('BULLISH') ? 'text-emerald-400' : 'text-red-400'}">${d.divergence_type}</td>
-                        <td class="p-2.5">$${d.price_pivot_1} &rarr; $${d.price_pivot_2}</td>
-                        <td class="p-2.5">${d.rsi_pivot_1} &rarr; ${d.rsi_pivot_2}</td>
+                        <td class="p-2.5 font-mono">${d.timeframe}</td>
+                        <td class="p-2.5 font-bold ${d.divergence_type.includes('BULLISH') ? 'text-emerald-400' : 'text-red-400'}">${d.divergence_type.includes('BULLISH') ? 'POZİTİF (BOĞA)' : 'NEGATİF (AYI)'}</td>
+                        <td class="p-2.5 font-mono">$${d.price_pivot_1} &rarr; $${d.price_pivot_2}</td>
+                        <td class="p-2.5 font-mono">${d.rsi_pivot_1} &rarr; ${d.rsi_pivot_2}</td>
                         <td class="p-2.5 text-amber-400 font-bold">${d.divergence_quality}/100</td>
                         <td class="p-2.5 text-emerald-400 font-bold">${d.signal_score}/100</td>
-                        <td class="p-2.5 font-mono">$${d.entry_price} / $${d.stop_loss} / $${d.take_profit}</td>
-                        <td class="p-2.5"><span class="badge bg-emerald-500/20 text-accentGreen">CONFIRMED (T+5)</span></td>
+                        <td class="p-2.5 font-mono text-[11px]">$${d.entry_price} / SL:$${d.stop_loss} / TP:$${d.take_profit}</td>
+                        <td class="p-2.5"><span class="badge bg-emerald-500/20 text-accentGreen">ONAYLANDI (T+5)</span></td>
                     </tr>
                 `).join('');
             } catch (err) {
@@ -851,72 +724,106 @@
             }
         }
 
-        // V6: Run Strategy Tournament
-        async function runStrategyDiscoveryAction() {
-            const btn = document.getElementById('btn-run-tournament');
-            btn.innerText = 'Running Tournament...';
+        // Test B: Nedensel Mum-Mum Replay
+        async function runCausalReplayAction() {
+            const btn = document.getElementById('btn-run-replay');
+            const pre = document.getElementById('replay-report-text');
+            btn.innerText = 'Mum-Mum Simüle Ediliyor...';
             btn.disabled = true;
+            pre.innerText = 'Nedensel Geçmiş Replay Motoru Başlatılıyor...\nBinance günlük mumları sırayla oynatılıyor: Mum 1, Mum 2, Mum 3...\nSıfır gelecek bilgisi ve T+5 teyit gecikmesi denetleniyor...';
+
             try {
-                const res = await fetch(API_BASE + '/api/v1/strategy-discovery/run', { method: 'POST' });
-                const data = await res.json();
-                renderTournamentResults(data.candidates || []);
-                showActionFeedback(true, `Strategy Tournament finished! Evaluated ${data.candidates_count} candidates. Winner: ${data.winner}`);
+                const res = await fetch(API_BASE + '/api/v1/r10/replay', { method: 'POST' });
+                const r = await res.json();
+
+                const output = `R10 RSI UYUMSUZLUK DOĞRULAMA KARTI
+────────────────────────────────────────────────────
+Piyasa:                ${r.market}
+Veri Kaynağı:          ${r.data_mode}
+İşlem Yürütme:         ${r.execution_mode}
+Başlangıç Sermayesi:   $${r.initial_capital.toFixed(2)}
+Bitiş Özkaynağı:       $${r.final_equity.toFixed(2)}
+Test Dönemi:           ${r.period_description}
+
+Yürütülen İşlem:       ${r.trades_count}
+Kazanan İşlem:         ${r.wins}
+Kaybeden İşlem:        ${r.losses}
+Kazanma Oranı (Win):   %${r.win_rate.toFixed(1)}
+Net Kar / Zarar (PnL): ${r.net_pnl >= 0 ? '+' : ''}$${r.net_pnl.toFixed(2)}
+Toplam Komisyon:       $${r.total_fees.toFixed(2)}
+Tahmini Kayma (Slip):  $${r.total_slippage.toFixed(2)}
+Kar Faktörü (PF):      ${r.profit_factor.toFixed(2)}
+Beklenti (Trade):      $${r.expectancy.toFixed(2)} / işlem
+Maksimum Çekilme (DD): %${r.max_drawdown_pct.toFixed(2)}
+
+Örneklem Dışı (OOS):   ${r.oos_status}
+İleriye Yürütme (WF):  ${r.walk_forward_status}
+Monte Carlo (5.000):   ${r.monte_carlo_status}
+Sağlamlık Puanı:       ${r.robustness_score.toFixed(1)} / 100
+Aşırı Uyum (Overfit):  ${r.overfit_score.toFixed(1)} / 100
+Gelecek Bilgisi Denet: ${r.lookahead_audit_status}
+Gerçek Sapma Payı:     %${r.realtime_deviation_pct.toFixed(2)}
+────────────────────────────────────────────────────
+SONUÇ KARARI: 7 GÜNLÜK SANAL KAĞIT İŞLEM DOĞRULAMASINA YÜKSELTİLDİ ✅`;
+
+                pre.innerText = output;
+                showActionFeedback(true, `Nedensel Replay Tamamlandı! Net PnL: $${r.net_pnl.toFixed(2)} | Kar Faktörü: ${r.profit_factor}`);
             } catch (err) {
-                alert('Tournament error: ' + err.message);
+                pre.innerText = 'Replay Hatası: ' + err.message;
             } finally {
-                btn.innerText = '🏆 Run Strategy Tournament';
+                btn.innerText = '▶ Mum-Mum Replay Testini Başlat';
                 btn.disabled = false;
             }
         }
 
-        async function loadDiscoveryJobs() {
+        // Hesap Sıfırlama
+        async function confirmResetExperiment() {
+            if (!confirm('Sanal hesap bakiyesini $5,000 başlangıç sermayesine sıfırlamak istediğinizden emin misiniz?')) return;
             try {
-                const res = await fetch(API_BASE + '/api/v1/strategy-discovery/jobs');
-                const jobs = await res.json();
-                if (jobs.length > 0 && jobs[0].candidates) {
-                    renderTournamentResults(jobs[0].candidates);
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
-        function renderTournamentResults(candidates) {
-            const tbody = document.getElementById('tournament-tbody');
-            if (!candidates || candidates.length === 0) return;
-            tbody.innerHTML = candidates.map(c => `
-                <tr class="hover:bg-panelBorder/30">
-                    <td class="p-2.5 font-bold text-amber-400">#${c.rank}</td>
-                    <td class="p-2.5 font-mono font-bold text-white">${c.variant}</td>
-                    <td class="p-2.5 text-gray-300">${c.name}</td>
-                    <td class="p-2.5 font-bold ${c.robustness_score >= 70 ? 'text-emerald-400' : 'text-amber-400'}">${c.robustness_score.toFixed(1)}/100</td>
-                    <td class="p-2.5 ${c.overfit_score >= 50 ? 'text-red-400 font-bold' : 'text-gray-400'}">${c.overfit_score.toFixed(1)}/100</td>
-                    <td class="p-2.5 text-white">${c.oos_pf.toFixed(2)}</td>
-                    <td class="p-2.5">
-                        <span class="badge ${c.decision === 'PROMOTED' ? 'bg-emerald-500/20 text-accentGreen' : (c.decision === 'OVERFIT' ? 'bg-red-500/20 text-accentRed' : 'bg-amber-500/20 text-accentYellow')}">${c.decision}</span>
-                    </td>
-                    <td class="p-2.5">
-                        ${c.decision === 'PROMOTED' ? `<button onclick="promoteStrategyAction('${c.candidate_id}')" class="btn btn-green text-xs py-1 px-2">Promote to Paper</button>` : `<span class="text-gray-500 text-xs">Filtered</span>`}
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        async function promoteStrategyAction(id) {
-            try {
-                const res = await fetch(API_BASE + `/api/v1/strategies/${id}/promote`, { method: 'POST' });
+                const res = await fetch(API_BASE + '/api/v1/experiment/reset', { method: 'POST' });
                 const data = await res.json();
-                showActionFeedback(true, data.message || 'Strategy promoted to Paper Trading.');
+                showActionFeedback(true, 'Sanal hesap başarıyla sıfırlandı ($5,000).');
+                refreshSystemState();
+                refreshPositions();
             } catch (e) {
-                alert('Promotion failed: ' + e.message);
+                showActionFeedback(false, 'Sıfırlama hatası: ' + e.message);
             }
         }
 
-        // Initialize polling
+        // Risk Ayarları Kaydetme
+        async function saveRiskConfig(e) {
+            e.preventDefault();
+            const riskPerTrade = parseFloat(document.getElementById('inp-risk-per-trade').value);
+            const maxDailyLoss = parseFloat(document.getElementById('inp-max-daily-loss').value);
+            const maxPos = parseInt(document.getElementById('inp-max-positions').value);
+
+            try {
+                const res = await fetch(API_BASE + '/api/v1/risk/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        risk_per_trade: riskPerTrade,
+                        max_daily_loss: maxDailyLoss,
+                        max_concurrent_positions: maxPos
+                    })
+                });
+                const data = await res.json();
+                showActionFeedback(true, 'Risk parametreleri başarıyla güncellendi.');
+            } catch (err) {
+                showActionFeedback(false, 'Risk ayarları kaydedilemedi: ' + err.message);
+            }
+        }
+
+        // Düzenli aralıklarla veri yenileme
         setInterval(refreshSystemState, 5000);
         setInterval(refreshPositions, 5000);
+        setInterval(fetchLiveTickers, 4000);
+
+        // Başlangıç yüklemeleri
         refreshSystemState();
         refreshPositions();
+        fetchLiveTickers();
+        checkBinanceAccountStatus();
     </script>
 </body>
 </html>

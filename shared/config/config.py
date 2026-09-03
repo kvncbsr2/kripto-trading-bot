@@ -15,15 +15,33 @@ class Settings(BaseSettings):
     SYNC_DATABASE_URL: str = "sqlite:///./kripto_agent.db"
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # Exchange (Read-Only)
+    # Exchange & Network Environment
     EXCHANGE_NAME: str = "binance"
     EXCHANGE_API_KEY: Optional[str] = None
     EXCHANGE_API_SECRET: Optional[str] = None
     EXCHANGE_TESTNET: bool = False
+    BINANCE_ENV: str = "testnet"  # "testnet" or "production_market_data"
+    BINANCE_API_KEY: Optional[str] = None
+    BINANCE_API_SECRET: Optional[str] = None
+    BINANCE_TESTNET_REST_URL: str = "https://testnet.binance.vision/api"
+    BINANCE_TESTNET_WS_URL: str = "wss://testnet.binance.vision/ws"
+
+    # DECOUPLED DATA / EXECUTION MODES
+    MARKET_DATA_SOURCE: str = "binance"  # Real Binance Live Data
+    EXECUTION_MODE: str = "paper"        # Strict Virtual Execution
+    SECURITY_LEVEL: int = 1             # Level 1: Market Data + Paper Execution
 
     # STRICT LIVE TRADING GUARDRAILS
     PAPER_TRADING: bool = True
     LIVE_TRADING: bool = False  # Hard guardrail
+
+    # R10 RSI Divergence Configuration
+    R10_ENABLED: bool = True
+    R10_TIMEFRAME: str = "1d"
+    R10_RSI_LENGTH: int = 14
+    R10_PIVOT_LEFT: int = 5
+    R10_PIVOT_RIGHT: int = 5
+    R10_CONFIRMATION_ENABLED: bool = True
 
     # V2 7-Day $5,000 Experiment Configuration
     EXPERIMENT_NAME: str = "7_DAY_5000_PAPER_TEST"
