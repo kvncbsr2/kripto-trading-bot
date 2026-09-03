@@ -177,7 +177,9 @@ class CommandBus:
         )
         if not closed_pos:
             res = {"success": False, "message": f"Failed to close position for symbol {symbol}."}
-            self._log_audit("CLOSE_POSITION", {"symbol": symbol}, False, res, error="Failed to close")
+            self._log_audit(
+                "CLOSE_POSITION", {"symbol": symbol}, False, res, error="Failed to close"
+            )
             return res
 
         res = {

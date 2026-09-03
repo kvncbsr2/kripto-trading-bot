@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 
+import numpy as np
 import pandas as pd
 import vectorbt as vbt
 
@@ -37,6 +38,14 @@ class VectorBTBacktester:
         """
         Executes vectorized portfolio simulation with fees, slippage, and capital constraints.
         """
+        # Ensure indices match close.index to avoid VectorBT broadcast mismatch
+        entries = pd.Series(entries.values, index=close.index)
+        exits = pd.Series(exits.values, index=close.index)
+        if short_entries is not None and isinstance(short_entries, pd.Series):
+            short_entries = pd.Series(short_entries.values, index=close.index)
+        if short_exits is not None and isinstance(short_exits, pd.Series):
+            short_exits = pd.Series(short_exits.values, index=close.index)
+
         try:
             pf = vbt.Portfolio.from_signals(
                 close=close,
@@ -58,10 +67,16 @@ class VectorBTBacktester:
             sortino = float(pf.sortino_ratio()) if not pd.isna(pf.sortino_ratio()) else 0.0
             trades_count = int(pf.trades.count())
             win_rate = float(pf.trades.win_rate()) * 100.0 if trades_count > 0 else 0.0
-            profit_factor = (
-                float(pf.trades.profit_factor()) if not pd.isna(pf.trades.profit_factor()) else 0.0
+            pf_raw = pf.trades.profit_factor()
+            if pd.isna(pf_raw) or np.isinf(pf_raw):
+                profit_factor = 99.0 if (not pd.isna(pf_raw) and pf_raw > 0) else 0.0
+            else:
+                profit_factor = float(pf_raw)
+            expectancy = (
+                float(pf.trades.expectancy())
+                if (trades_count > 0 and not pd.isna(pf.trades.expectancy()))
+                else 0.0
             )
-            expectancy = float(pf.trades.expectancy()) if trades_count > 0 else 0.0
 
             return {
                 "engine": "vectorbt",

@@ -126,6 +126,12 @@
                 <button onclick="switchTab('backtest')" id="tab-btn-backtest" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
                     📈 Backtest Engine
                 </button>
+                <button onclick="switchTab('divergences')" id="tab-btn-divergences" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    🎯 R10 Divergences
+                </button>
+                <button onclick="switchTab('discovery')" id="tab-btn-discovery" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    🔬 Strategy Discovery
+                </button>
                 <button onclick="switchTab('ai')" id="tab-btn-ai" class="w-full text-left px-3 py-2 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
                     🤖 AI Committee
                 </button>
@@ -426,6 +432,77 @@
                 </div>
             </div>
 
+            <!-- TAB: R10 DIVERGENCES -->
+            <div id="tab-divergences" class="hidden space-y-4">
+                <div class="glass-card p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">🎯 R10 RSI Divergence Scanner</h2>
+                            <p class="text-xs text-gray-400">Strict causal pivot engine (left=5, right=5). Zero lookahead: confirmation occurs strictly at T+5.</p>
+                        </div>
+                        <button onclick="fetchDivergences()" class="btn btn-blue text-xs">
+                            🔄 Scan Divergences
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
+                                <tr>
+                                    <th class="p-2.5">Symbol</th>
+                                    <th class="p-2.5">Timeframe</th>
+                                    <th class="p-2.5">Type</th>
+                                    <th class="p-2.5">Price Pivot 1 / 2</th>
+                                    <th class="p-2.5">RSI Pivot 1 / 2</th>
+                                    <th class="p-2.5">Quality</th>
+                                    <th class="p-2.5">Score</th>
+                                    <th class="p-2.5">Entry / SL / TP</th>
+                                    <th class="p-2.5">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="divergences-tbody" class="divide-y border-panelBorder">
+                                <tr><td colspan="9" class="p-4 text-center text-gray-500">Click 'Scan Divergences' to detect confirmed swings.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: STRATEGY DISCOVERY & TOURNAMENT -->
+            <div id="tab-discovery" class="hidden space-y-4">
+                <div class="glass-card p-5 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-white">🔬 Strategy Discovery & Automated Tournament</h2>
+                            <p class="text-xs text-gray-400">Generates 10 R10 variants, applies Purged Walk-Forward, Fee/Slippage Stress, and ranks by Robustness Score.</p>
+                        </div>
+                        <button onclick="runStrategyDiscoveryAction()" id="btn-run-tournament" class="btn btn-green text-xs">
+                            🏆 Run Strategy Tournament
+                        </button>
+                    </div>
+
+                    <!-- Tournament Results Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
+                                <tr>
+                                    <th class="p-2.5">Rank</th>
+                                    <th class="p-2.5">Variant</th>
+                                    <th class="p-2.5">Strategy Name</th>
+                                    <th class="p-2.5">Robustness Score</th>
+                                    <th class="p-2.5">Overfit Score</th>
+                                    <th class="p-2.5">OOS PF</th>
+                                    <th class="p-2.5">Promotion Decision</th>
+                                    <th class="p-2.5">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tournament-tbody" class="divide-y border-panelBorder">
+                                <tr><td colspan="8" class="p-4 text-center text-gray-500">No tournament executed yet. Click 'Run Strategy Tournament' to evaluate candidates.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- TAB 7: AI COMMITTEE -->
             <div id="tab-ai" class="hidden space-y-4">
                 <div class="glass-card p-5 space-y-4">
@@ -501,23 +578,27 @@
 
         // Tab Switcher
         function switchTab(tabId) {
-            const tabs = ['overview', 'scanner', 'strategies', 'positions', 'risk', 'backtest', 'ai', 'audit'];
+            const tabs = ['overview', 'scanner', 'strategies', 'positions', 'risk', 'backtest', 'divergences', 'discovery', 'ai', 'audit'];
             tabs.forEach(t => {
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('tab-btn-' + t);
-                if (t === tabId) {
-                    el.classList.remove('hidden');
-                    btn.classList.add('bg-panelBorder', 'text-white');
-                    btn.classList.remove('text-gray-400');
-                } else {
-                    el.classList.add('hidden');
-                    btn.classList.remove('bg-panelBorder', 'text-white');
-                    btn.classList.add('text-gray-400');
+                if (el && btn) {
+                    if (t === tabId) {
+                        el.classList.remove('hidden');
+                        btn.classList.add('bg-panelBorder', 'text-white');
+                        btn.classList.remove('text-gray-400');
+                    } else {
+                        el.classList.add('hidden');
+                        btn.classList.remove('bg-panelBorder', 'text-white');
+                        btn.classList.add('text-gray-400');
+                    }
                 }
             });
 
             if (tabId === 'scanner') runLiveScanner();
             if (tabId === 'audit') fetchAuditLogs();
+            if (tabId === 'divergences') fetchDivergences();
+            if (tabId === 'discovery') loadDiscoveryJobs();
         }
 
         // Action Banner Display
@@ -739,6 +820,95 @@
                 `).join('');
             } catch (e) {
                 console.error(e);
+            }
+        }
+
+        // V6: Fetch Confirmed R10 Divergences
+        async function fetchDivergences() {
+            try {
+                const res = await fetch(API_BASE + '/api/v1/divergences');
+                const list = await res.json();
+                const tbody = document.getElementById('divergences-tbody');
+                if (!list || list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-500">No active confirmed divergences currently detected.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = list.map(d => `
+                    <tr class="hover:bg-panelBorder/30">
+                        <td class="p-2.5 font-bold text-white">${d.symbol}</td>
+                        <td class="p-2.5">${d.timeframe}</td>
+                        <td class="p-2.5 font-bold ${d.divergence_type.includes('BULLISH') ? 'text-emerald-400' : 'text-red-400'}">${d.divergence_type}</td>
+                        <td class="p-2.5">$${d.price_pivot_1} &rarr; $${d.price_pivot_2}</td>
+                        <td class="p-2.5">${d.rsi_pivot_1} &rarr; ${d.rsi_pivot_2}</td>
+                        <td class="p-2.5 text-amber-400 font-bold">${d.divergence_quality}/100</td>
+                        <td class="p-2.5 text-emerald-400 font-bold">${d.signal_score}/100</td>
+                        <td class="p-2.5 font-mono">$${d.entry_price} / $${d.stop_loss} / $${d.take_profit}</td>
+                        <td class="p-2.5"><span class="badge bg-emerald-500/20 text-accentGreen">CONFIRMED (T+5)</span></td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // V6: Run Strategy Tournament
+        async function runStrategyDiscoveryAction() {
+            const btn = document.getElementById('btn-run-tournament');
+            btn.innerText = 'Running Tournament...';
+            btn.disabled = true;
+            try {
+                const res = await fetch(API_BASE + '/api/v1/strategy-discovery/run', { method: 'POST' });
+                const data = await res.json();
+                renderTournamentResults(data.candidates || []);
+                showActionFeedback(true, `Strategy Tournament finished! Evaluated ${data.candidates_count} candidates. Winner: ${data.winner}`);
+            } catch (err) {
+                alert('Tournament error: ' + err.message);
+            } finally {
+                btn.innerText = '🏆 Run Strategy Tournament';
+                btn.disabled = false;
+            }
+        }
+
+        async function loadDiscoveryJobs() {
+            try {
+                const res = await fetch(API_BASE + '/api/v1/strategy-discovery/jobs');
+                const jobs = await res.json();
+                if (jobs.length > 0 && jobs[0].candidates) {
+                    renderTournamentResults(jobs[0].candidates);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderTournamentResults(candidates) {
+            const tbody = document.getElementById('tournament-tbody');
+            if (!candidates || candidates.length === 0) return;
+            tbody.innerHTML = candidates.map(c => `
+                <tr class="hover:bg-panelBorder/30">
+                    <td class="p-2.5 font-bold text-amber-400">#${c.rank}</td>
+                    <td class="p-2.5 font-mono font-bold text-white">${c.variant}</td>
+                    <td class="p-2.5 text-gray-300">${c.name}</td>
+                    <td class="p-2.5 font-bold ${c.robustness_score >= 70 ? 'text-emerald-400' : 'text-amber-400'}">${c.robustness_score.toFixed(1)}/100</td>
+                    <td class="p-2.5 ${c.overfit_score >= 50 ? 'text-red-400 font-bold' : 'text-gray-400'}">${c.overfit_score.toFixed(1)}/100</td>
+                    <td class="p-2.5 text-white">${c.oos_pf.toFixed(2)}</td>
+                    <td class="p-2.5">
+                        <span class="badge ${c.decision === 'PROMOTED' ? 'bg-emerald-500/20 text-accentGreen' : (c.decision === 'OVERFIT' ? 'bg-red-500/20 text-accentRed' : 'bg-amber-500/20 text-accentYellow')}">${c.decision}</span>
+                    </td>
+                    <td class="p-2.5">
+                        ${c.decision === 'PROMOTED' ? `<button onclick="promoteStrategyAction('${c.candidate_id}')" class="btn btn-green text-xs py-1 px-2">Promote to Paper</button>` : `<span class="text-gray-500 text-xs">Filtered</span>`}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function promoteStrategyAction(id) {
+            try {
+                const res = await fetch(API_BASE + `/api/v1/strategies/${id}/promote`, { method: 'POST' });
+                const data = await res.json();
+                showActionFeedback(true, data.message || 'Strategy promoted to Paper Trading.');
+            } catch (e) {
+                alert('Promotion failed: ' + e.message);
             }
         }
 

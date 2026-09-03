@@ -1,127 +1,114 @@
-# ⚡ KRIPTO AGENT — Master V5: Local Trading Control Center
+# ⚡ KRIPTO AGENT — Master V6
 
-> **Production-Grade Autonomous Crypto Trading Agent & Local Mission Control**  
-> *Binance Real-Time Data + Command Bus + VectorBT Backtesting + Prometheus Monitoring*
-
----
-
-## 🎯 Ana Hedef & Felsefe
-
-**KRIPTO AGENT V5**, yalnızca pasif bir izleme paneli değil; yerel bilgisayarınızda çalışan, borsa bağlantısından risk yönetimine, tarayıcıdan strateji yürütümüne kadar tüm alt motorları doğrudan yöneten bir **Local Trading Control Center**'dır.
-
-* **Sıfır Sahte / Sıfır Mock Prensibi**: Arayüzdeki her buton ve kontrol, arka plandaki gerçek bir servisi, Command Bus eylemini ve borsa/motor fonksiyonunu çalıştırır.
-* **Sanal Başlangıç Sermayesi**: \$5,000.00 USD
-* **Piyasa Verisi**: Binance Spot (Gerçek Zamanlı Multiplexed WebSocket + REST Fallback)
-* **İşlem Modeli**: Paper Trading (%0.1 komisyon, 5 bps slippage, gerçek Ask/Bid spread)
-* **İşlem Başına Risk**: %0.5 (yaklaşık \$25.00)
-* **Günlük Maksimum Zarar**: \$50.00 (`DAILY_RISK_LOCK`)
-* **Canlı Borsa Koruması**: Kod düzeyinde sert güvenlik kilidi (`LIVE_TRADING=false`). Canlı emir motoru `BinanceLiveExecutionEngine` doğrudan kilitlidir.
+> **Strategy Discovery + R10 RSI Divergence + Automated Backtest + Overfitting Protection + Real-Time Validation**  
+> *Production-Grade Quantitative Crypto Trading Platform & Local Mission Control*
 
 ---
 
-## 🏗️ Mimari Şema & Command Bus Akışı
+## 🎯 Ana Hedef & Felsefe (Master V6)
+
+**KRIPTO AGENT V6**, yalnızca geçmiş veride "eğri uydurarak (curve-fitting) kârlı görünen" stratejiler aramaz. Asıl amaç:
+
+* **Sıfır Lookahead / Geleceğe Bakış Engeli**: Pivotlar ancak sağ taraftaki 5 bar (`right_bars=5`) oluştuktan sonra doğrulanır. Sinyal geçmişe boyanmaz (`pivot_time != signal_time`), sadece gerçek zamanlı kesinleşme anında üretilir.
+* **Katı Aşırı Öğrenme (Overfitting) Koruması**: Arındırılmış (Purged) zaman serisi bölmesi (60% Train, 20% Val, 20% OOS) ve 5 barlık ambargo (Embargo) penceresi.
+* **Otomatik Strateji Keşfi & Turnuvası**: R10 ailesinden 10 farklı varyant (R10-V1 .. R10-V10) otomatik olarak üretilir, In-Sample ve Out-of-Sample verilerde yarıştırılır ve **Robustness Score (0–100)** ile sıralanır.
+* **Stres Testleri**: 2x ve 3x komisyon testi (`FEE_FRAGILE`), 20 bps slippage testi (`SLIPPAGE_FRAGILE`), 5,000 simülasyonlu Monte Carlo çekilişi ve parametre platosu kararlılık analizi.
+* **Promotion Gate (Canlıya Terfi Kapısı)**: Robustness Skoru $\ge 70$, OOS Kâr Faktörü $\ge 1.10$, pozitif expectancy ve 0 lookahead ihlali gerektirir.
+* **Paper Trading & Yürütüm Sapması**: Backtest beklentileri ile canlı simülasyon arasındaki kayma ve kâr sapmasını (`BACKTEST_LIVE_DEVIATION`) anlık takip eder.
+
+---
+
+## 🏗️ Mimari Pipeline
 
 ```text
-               LOCAL OPERATOR ACTION
-                         │
-                         ▼
-        LOCAL TRADING CONTROL DASHBOARD
-         (http://localhost:8000/dashboard)
-                         │
-                         ▼
-               FASTAPI COMMAND BUS
-  (/api/agent/*, /api/risk/*, /api/strategies/*)
-                         │
-                         ▼
-             READINESS GATE VALIDATION
-  (Safety Lock, Risk Limits, Capital, DB Health)
-                         │
-      ┌──────────────────┴──────────────────┐
-      ▼                                     ▼
-TRADING ENGINES                      PERSISTENCE & AUDIT
-• Binance Connector                  • Immutable Audit Trail
-• Market Scanner                     • PostgreSQL / TimescaleDB
-• Feature & Regime Engine            • Redis Real-Time State
-• Strategy Manager                   • Prometheus /metrics
-• Risk Engine & Circuit Breaker      • Grafana Dashboards
-• Paper Broker & Fills
-• VectorBT & Monte Carlo
+                  BINANCE REAL-TIME MARKET DATA
+                                │
+                                ▼
+               CAUSAL FEATURE & PIVOT ENGINE
+         (Strict T+5 Delay, Zero Future Knowledge)
+                                │
+                                ▼
+              R10 RSI DIVERGENCE SIGNAL GENERATOR
+     (Regular Bullish / Bearish, Quality & Signal Score)
+                                │
+                                ▼
+             STRATEGY DISCOVERY & TOURNAMENT ENGINE
+         (10 R10 Variants, VectorBT Vectorized Engine)
+                                │
+                                ▼
+                  OVERFITTING PROTECTION ENGINE
+      ┌─────────────────────────┴─────────────────────────┐
+      ▼                                                   ▼
+PURGED TIME-SERIES OOS                            STRESS TESTING
+• 60% In-Sample / 20% OOS                         • Fee Stress (1x, 2x, 3x)
+• 5-bar Boundary Embargo                          • Slippage Stress (5..50 bps)
+• Walk-Forward Stability                          • Monte Carlo (5,000 runs)
+• Parameter Plateau Analysis                      • Cross-Coin & Regime Tests
+      │                                                   │
+      └─────────────────────────┬─────────────────────────┘
+                                ▼
+                     STRATEGY PROMOTION GATE
+                    (Robustness Score >= 70)
+                                │
+                                ▼
+                 REAL-TIME PAPER VALIDATION ENGINE
+              (Execution Efficiency & Deviation Tracking)
 ```
 
 ---
 
 ## 🚀 Tek Komutla Yerel Başlatma
 
-Windows ortamında tek tıklamayla sistemi başlatabilir ve doğrudan Control Center ekranına ulaşabilirsiniz:
+Windows ortamında tek tıkla sistemi başlatabilir ve doğrudan Control Center ekranına ulaşabilirsiniz:
 
 ```bash
-# Windows Batch Dosyası:
+# Windows Batch:
 start.bat
 
 # veya PowerShell:
 .\start.ps1
 
-# veya Makefile ile:
+# veya Make:
 make dev
 ```
 
-Dashboard otomatik olarak tarayıcınızda açılır:
+Dashboard Linkleri:
 * **Local Control Dashboard**: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
 * **OpenAPI Swagger Belgeleri**: [http://localhost:8000/docs](http://localhost:8000/docs)
 * **Prometheus Metrikleri**: [http://localhost:8000/metrics](http://localhost:8000/metrics)
 
 ---
 
-## 🎮 Local Control Center Yetenekleri
+## 🎮 V6 Dashboard & API Modülleri
 
-1. **Global Control Bar**:
-   * Sistem durumu (`TRADING`, `PAUSED`, `RISK_LOCK`, `STOPPED`), Binance bağlantısı ve Pre-flight Readiness Gate durumunu canlı görüntüler.
-   * `START AGENT`, `PAUSE`, `RESUME`, `STOP` ve `EMERGENCY STOP` eylemlerini gerçek backend fonksiyonlarıyla çalıştırır.
-2. **Emergency Stop (Acil Durum Devre Kesici)**:
-   * Tek tıkla tüm açık limit emirlerini iptal eder, yeni emir üretimini dondurur ve sistemi `RISK_LOCK` durumuna kilitler.
-3. **Canlı Binance Tarayıcısı (Live Scanner)**:
-   * `SCAN NOW` butonu ile Binance üzerindeki likit USDT paritelerini (hacim >\$10M, spread <15 bps) tarar ve Fırsat Skorunu (0–100) anında günceller.
-4. **Strateji Yönetimi (Strategies)**:
-   * `Trend Following`, `Mean Reversion` ve `RSI Divergence` stratejilerini çalışma anında devreye alıp devreden çıkarma (`ENABLE / DISABLE`).
-5. **Pozisyon Kapatma (Close Position)**:
-   * Açık paper pozisyonlarını simüle edilmiş piyasa fiyatından anında kapatır ve gerçekleşen kâr/zararı hesaplar.
-6. **Dinamik Risk Merkezi (Risk Center)**:
-   * İşlem başı risk, günlük zarar limiti, maksimum pozisyon adedi ve ATR çarpanını doğrudan arayüzden günceller.
-7. **VectorBT Backtest & Monte Carlo**:
-   * İstenen parite ve strateji için vektörize portföy simülasyonu ve 1.000 tekrarlı Monte Carlo çekilişi gerçekleştirir.
-8. **Denetim İzi (Audit Trail)**:
-   * Kullanıcı tarafından gerçekleştirilen her işlemi zaman damgası, parametreler ve başarı durumuyla kayıt altına alır.
+1. **R10 Divergences Tab**:
+   * Gerçek zamanlı doğrulanmış swing dip ve tepeler, RSI uyumsuzluk oranları, kalite skoru ve kesinleşmiş sinyaller.
+2. **Strategy Discovery & Tournament Tab**:
+   * `RUN STRATEGY TOURNAMENT` butonu ile 10 R10 varyantını yarıştırma, Robustness ve Overfit Skorları, OOS sonuçları ve `Promote to Paper` eylemi.
+3. **Backtest vs Paper Validation**:
+   * Gerçek kağıt işlemler ile teorik model arasındaki yürütüm verimliliği (`ALIGNED` / `DEVIATION_WARNING`).
 
 ---
 
-## 🧪 Kalite ve Test Durumu
+## 🧪 Test Durumu
 
-Tüm test paketleri (Unit, Strategy, Risk, Failure, Backtest, E2E, Control Center) başarıyla geçmiştir:
+Tüm test paketleri (Unit, Anti-Lookahead, Strategy, Risk, Backtest, Discovery, API) %100 başarıyla geçmiştir:
 
 ```text
-============================== 40 passed in 27.76s ==============================
+============================== 49 passed in 38.76s ==============================
 ```
 
-* **Pytest**: **40 / 40 PASS (%100 Başarı)**
+* **Pytest**: **49 / 49 PASS (%100 Başarı)**
 * **Ruff Linter & Formatter**: **0 Hata**
-* **MyPy Tip Denetimi**: **0 Hata (151 kaynak dosya)**
+* **MyPy Tip Denetimi**: **0 Hata (159 kaynak dosya)**
 
 ---
 
 ## 📚 Dokümantasyonlar
 
+* [R10 RSI Divergence Stratejisi](docs/r10-divergence.md)
+* [Strategy Discovery & Turnuva Motoru](docs/strategy-discovery.md)
+* [Geleceğe Bakış Engelleme (Anti-Lookahead)](docs/anti-lookahead.md)
+* [Strateji Terfi Kapısı & Doğrulama](docs/validation.md)
 * [Local Control Center Mimarisi](docs/CONTROL_CENTER.md)
-* [GitHub Kaynak ve Bağımlılık Matrisi](docs/SOURCE_AUDIT.md)
-* [Sistem Mimarisi](docs/ARCHITECTURE.md)
-* [Binance Entegrasyon Mimarisi](docs/BINANCE.md)
-* [Piyasa Verisi & Tarayıcı (Scanner)](docs/MARKET_DATA.md)
-* [Strateji Motoru](docs/STRATEGIES.md)
-* [RSI Uyumsuzluk Motoru](docs/RSI_DIVERGENCE.md)
-* [Risk Modeli & Devre Kesici](docs/RISK_MODEL.md)
-* [Paper Broker & Maliyet Simülasyonu](docs/PAPER_TRADING.md)
-* [Walk-Forward Doğrulama](docs/WALK_FORWARD.md)
-* [Monte Carlo Simülasyonu](docs/MONTE_CARLO.md)
-* [7 Günlük Doğrulama Deneyi](docs/7_DAY_EXPERIMENT.md)
-* [API Dokümantasyonu](docs/API.md)
-* [Güvenlik Mimarisi](docs/SECURITY.md)
-* [Operasyon El Kitabı](docs/OPERATIONS.md)
+* [GitHub Kaynak Matrisi](docs/SOURCE_AUDIT.md)

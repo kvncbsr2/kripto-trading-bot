@@ -234,3 +234,108 @@ class SystemEventModel(Base, TimestampMixin):
     event: Mapped[str] = mapped_column(String(100), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_json: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+
+
+# =====================================================================
+# MASTER PROMPT V6 MODELS: REGISTRY, DISCOVERY, DIVERGENCE, ROBUSTNESS
+# =====================================================================
+
+
+class StrategyRegistryModel(Base, TimestampMixin):
+    __tablename__ = "strategy_registry"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    version: Mapped[str] = mapped_column(String(20), default="1.0", nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    strategy_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # e.g., R10_RSI_DIVERGENCE, TREND_FOLLOWING
+    timeframe: Mapped[str] = mapped_column(String(10), default="1d", nullable=False)
+    symbols: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    parameters_json: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    entry_rules_json: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    exit_rules_json: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    risk_rules_json: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(30), default="DRAFT", nullable=False
+    )  # DRAFT, BACKTESTING, VALIDATING, PAPER_TRADING, PROMOTED, REJECTED, OVERFIT, DISABLED
+
+
+class StrategyCandidateModel(Base, TimestampMixin):
+    __tablename__ = "strategy_candidates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    candidate_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    family: Mapped[str] = mapped_column(String(50), default="R10_DIVERGENCE", nullable=False)
+    dsl_definition: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
+    parameters: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
+    robustness_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    overfit_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    tournament_rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    promotion_status: Mapped[str] = mapped_column(
+        String(30), default="CANDIDATE", nullable=False
+    )  # CANDIDATE, PROMOTED, REJECTED, OVERFIT
+    rejection_reasons: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+
+
+class DiscoveryJobModel(Base, TimestampMixin):
+    __tablename__ = "discovery_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    strategy_family: Mapped[str] = mapped_column(
+        String(50), default="R10_DIVERGENCE", nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), default="PENDING", nullable=False
+    )  # PENDING, RUNNING, COMPLETED, FAILED, CANCELLED
+    progress_pct: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    candidates_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    best_candidate_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    metrics_summary: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class DivergenceEventModel(Base, TimestampMixin):
+    __tablename__ = "divergence_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(10), nullable=False)
+    divergence_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # REGULAR_BULLISH, REGULAR_BEARISH, HIDDEN_BULLISH, HIDDEN_BEARISH
+    pivot_1_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    pivot_2_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmation_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    pivot_1_price: Mapped[float] = mapped_column(Float, nullable=False)
+    pivot_2_price: Mapped[float] = mapped_column(Float, nullable=False)
+    pivot_1_rsi: Mapped[float] = mapped_column(Float, nullable=False)
+    pivot_2_rsi: Mapped[float] = mapped_column(Float, nullable=False)
+    divergence_quality: Mapped[float] = mapped_column(Float, nullable=False)
+    signal_score: Mapped[float] = mapped_column(Float, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(30), default="CONFIRMED", nullable=False
+    )  # DETECTED, CONFIRMED, ACTIONABLE, EXPIRED, EXECUTED
+
+
+class RobustnessScoreModel(Base, TimestampMixin):
+    __tablename__ = "robustness_scores"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    strategy_slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    version: Mapped[str] = mapped_column(String(20), nullable=False)
+    robustness_score: Mapped[float] = mapped_column(Float, nullable=False)  # 0 to 100
+    overfit_score: Mapped[float] = mapped_column(Float, nullable=False)  # 0 to 100
+    oos_profit_factor: Mapped[float] = mapped_column(Float, nullable=False)
+    walk_forward_stability: Mapped[float] = mapped_column(Float, nullable=False)
+    monte_carlo_drawdown_95th: Mapped[float] = mapped_column(Float, nullable=False)
+    fee_stress_passed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    slippage_stress_passed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    regime_dependence: Mapped[str] = mapped_column(String(50), default="BALANCED", nullable=False)
+    coin_dependence: Mapped[str] = mapped_column(
+        String(50), default="PORTFOLIO_WIDE", nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(30), nullable=False)  # PROMOTED, REJECTED, OVERFIT
