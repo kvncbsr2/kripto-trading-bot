@@ -746,6 +746,24 @@
                 const tbody = document.getElementById('positions-tbody');
                 const posCountEl = document.getElementById('val-positions-count');
                 if (posCountEl) posCountEl.innerText = `${posList.length} / 2`;
+
+                // Açık pozisyonlardan toplam PnL ve Portföy Bakiyesini anında hesaplayıp kartlara yansıt
+                let totalUnrealized = 0;
+                posList.forEach(p => {
+                    totalUnrealized += (p.unrealized_pnl || 0);
+                });
+
+                const pnlEl = document.getElementById('val-daily-pnl');
+                const eqEl = document.getElementById('val-equity');
+                if (pnlEl) {
+                    pnlEl.innerText = `${totalUnrealized >= 0 ? '+' : ''}$${totalUnrealized.toFixed(2)}`;
+                    pnlEl.className = `text-2xl font-bold mt-1 ${totalUnrealized >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+                }
+                if (eqEl) {
+                    const currentEquity = 5000.0 + totalUnrealized;
+                    eqEl.innerText = `$${currentEquity.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                }
+
                 if (!tbody) return;
 
                 if (posList.length === 0) {

@@ -744,20 +744,44 @@ async def get_backtest_by_id(id: int, db: AsyncSession = Depends(get_async_db)):
     }
 
 
+@router.get("/api/v1/system/status")
+@router.get("/api/system/status")
 @router.get("/system/status")
-async def get_system_status():
+async def get_system_status(db: AsyncSession = Depends(get_async_db)):
+    pos_list = await get_positions(db=db)
+    unrealized_pnl = sum(float(p.get("unrealized_pnl", 0.0)) for p in pos_list)
+
+    realized_pnl = 0.0
+    if hasattr(command_bus, "broker") and command_bus.broker:
+        realized_pnl = command_bus.broker.portfolio.realized_pnl
+        for cp in command_bus.broker.closed_positions_history:
+            realized_pnl += cp.realized_pnl
+
+    daily_pnl = realized_pnl + unrealized_pnl
+    base_balance = command_bus.broker.portfolio.balance if hasattr(command_bus, "broker") else settings.INITIAL_CAPITAL
+    equity = base_balance + daily_pnl
+    open_count = len(pos_list)
+
     return {
-        "system": "KRIPTO AGENT V2",
+        "system": "KRIPTO AGENT V6",
+        "system_state": RUNTIME_STATE.get("system_state", "TRADING"),
+        "equity": round(equity, 2),
+        "balance": round(base_balance, 2),
+        "daily_pnl": round(daily_pnl, 2),
+        "realized_pnl": round(realized_pnl, 2),
+        "unrealized_pnl": round(unrealized_pnl, 2),
+        "open_positions_count": open_count,
+        "is_halted": RUNTIME_STATE.get("is_halted", False),
+        "circuit_state": RUNTIME_STATE.get("circuit_state", "NORMAL"),
+        "paper_broker": "ONLINE 🟢",
         "market_data": "ONLINE 🟢",
         "database": "ONLINE 🟢",
         "redis": "ONLINE 🟢",
         "strategy_engine": "ONLINE 🟢",
         "risk_engine": "ONLINE 🟢",
-        "paper_broker": "ONLINE 🟢",
         "api": "ONLINE 🟢",
         "notifications": "ONLINE 🟢",
         "live_trading_prohibited": True,
-        "circuit_state": RUNTIME_STATE["circuit_state"],
     }
 
 
