@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KRIPTO AGENT — 7-Day $5,000 Paper Trading Validation System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0b0e14',
+                        cardBg: '#151a23',
+                        cardBorder: '#232b3b',
+                        accentGreen: '#00dc82',
+                        accentRed: '#ff4d4d',
+                        accentBlue: '#3b82f6',
+                        accentYellow: '#f59e0b',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0b0e14; color: #f3f4f6; }
+        .glass-panel { background: #151a23; border: 1px solid #232b3b; border-radius: 12px; }
+        .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-cardBorder bg-cardBg px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-emerald-500/20 text-accentGreen flex items-center justify-center font-bold text-xl">
+                ⚡
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    KRIPTO AGENT
+                    <span class="badge bg-amber-500/20 text-accentYellow border border-amber-500/30">V2 VALIDATION</span>
+                    <span class="badge bg-blue-500/20 text-accentBlue border border-blue-500/30">PAPER TRADING ONLY</span>
+                </h1>
+                <p class="text-xs text-gray-400">7-Day $5,000 Autonomous Algorithmic Crypto Validation System</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 text-xs text-gray-300 bg-darkBg px-3 py-1.5 rounded-lg border border-cardBorder">
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>SYSTEM: <b id="sys-status" class="text-emerald-400">NORMAL</b></span>
+            </div>
+            <div class="text-xs text-gray-400 font-mono" id="clock">00:00:00 UTC</div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+
+        <!-- Top Metrics Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Starting Capital -->
+            <div class="glass-panel p-5">
+                <div class="text-xs uppercase text-gray-400 font-semibold tracking-wider">Initial Capital</div>
+                <div class="text-2xl font-bold mt-1 text-white" id="initial-cap">$5,000.00</div>
+                <div class="text-xs text-gray-400 mt-2 flex justify-between">
+                    <span>Target: <b>$20 - $100/day</b></span>
+                    <span>Leverage: <b>1x Spot</b></span>
+                </div>
+            </div>
+
+            <!-- Current Equity -->
+            <div class="glass-panel p-5">
+                <div class="text-xs uppercase text-gray-400 font-semibold tracking-wider">Account Equity</div>
+                <div class="text-2xl font-bold mt-1 text-emerald-400" id="equity">$5,037.10</div>
+                <div class="text-xs text-gray-400 mt-2 flex justify-between">
+                    <span>Balance: <b id="balance">$5,000.00</b></span>
+                    <span>Unrealized: <b id="unrealized" class="text-emerald-400">+$37.10</b></span>
+                </div>
+            </div>
+
+            <!-- Today's PnL -->
+            <div class="glass-panel p-5">
+                <div class="text-xs uppercase text-gray-400 font-semibold tracking-wider">Today's Net PnL</div>
+                <div class="text-2xl font-bold mt-1 text-accentGreen" id="daily-pnl">+$37.10</div>
+                <div class="text-xs text-gray-400 mt-2 flex justify-between">
+                    <span>Daily Max Loss: <b>-$50.00</b></span>
+                    <span class="text-emerald-400">Target Hit: <b>+$20 ✅</b></span>
+                </div>
+            </div>
+
+            <!-- Max Drawdown -->
+            <div class="glass-panel p-5">
+                <div class="text-xs uppercase text-gray-400 font-semibold tracking-wider">Max Drawdown</div>
+                <div class="text-2xl font-bold mt-1 text-white" id="drawdown">0.36%</div>
+                <div class="text-xs text-gray-400 mt-2 flex justify-between">
+                    <span>Circuit Limit: <b>10.0%</b></span>
+                    <span class="text-emerald-400 font-semibold">SAFE</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Section: Tickers & Risk Dashboard -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Markets & Tickers -->
+            <div class="glass-panel p-5 space-y-4">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
+                    <span>Live Market Feeds</span>
+                    <span class="text-xs text-blue-400 font-mono">BINANCE REST/WS</span>
+                </h2>
+                <div class="space-y-3">
+                    <div class="bg-darkBg p-3 rounded-lg border border-cardBorder flex items-center justify-between">
+                        <div>
+                            <div class="font-bold text-white text-base">BTC / USDT</div>
+                            <div class="text-xs text-gray-400">Bitcoin Spot</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-mono font-bold text-emerald-400 text-lg" id="btc-price">$64,250.00</div>
+                            <div class="text-xs text-emerald-400">+2.45% 24h</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-darkBg p-3 rounded-lg border border-cardBorder flex items-center justify-between">
+                        <div>
+                            <div class="font-bold text-white text-base">ETH / USDT</div>
+                            <div class="text-xs text-gray-400">Ethereum Spot</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-mono font-bold text-blue-400 text-lg" id="eth-price">$3,480.50</div>
+                            <div class="text-xs text-blue-400">+1.82% 24h</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Opportunity Gauge -->
+                <div class="bg-darkBg p-3.5 rounded-lg border border-cardBorder space-y-2">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-gray-400">Opportunity Score:</span>
+                        <span class="font-bold text-emerald-400" id="opp-score">78 / 100 [TRADE]</span>
+                    </div>
+                    <div class="w-full bg-cardBg rounded-full h-2 overflow-hidden border border-cardBorder">
+                        <div class="bg-emerald-400 h-2 rounded-full" style="width: 78%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Risk & Circuit Breaker Dashboard -->
+            <div class="glass-panel p-5 space-y-4">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
+                    <span>Risk Management</span>
+                    <span class="badge bg-emerald-500/20 text-emerald-400">ACTIVE</span>
+                </h2>
+                <div class="space-y-2.5 text-xs text-gray-300">
+                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
+                        <span class="text-gray-400">Risk Per Trade:</span>
+                        <span class="font-mono font-bold text-white">0.5% (~$25.00)</span>
+                    </div>
+                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
+                        <span class="text-gray-400">Daily Max Loss Limit:</span>
+                        <span class="font-mono font-bold text-amber-400">$50.00 (1.0%)</span>
+                    </div>
+                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
+                        <span class="text-gray-400">Max Open Positions:</span>
+                        <span class="font-mono font-bold text-white" id="pos-count">1 / 2</span>
+                    </div>
+                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
+                        <span class="text-gray-400">Max Trades / Day:</span>
+                        <span class="font-mono font-bold text-white">3 / 5</span>
+                    </div>
+                    <div class="flex justify-between py-1.5 border-b border-cardBorder">
+                        <span class="text-gray-400">Target Policy:</span>
+                        <span class="font-mono font-bold text-blue-400">SOFT ($20 - $100)</span>
+                    </div>
+                    <div class="flex justify-between py-1.5">
+                        <span class="text-gray-400">Circuit State:</span>
+                        <span class="badge bg-emerald-500/20 text-emerald-400" id="circuit-badge">NORMAL</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Services Health -->
+            <div class="glass-panel p-5 space-y-3">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300">System Health Monitor</h2>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
+                        <span class="text-gray-400">Market Data</span>
+                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
+                    </div>
+                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
+                        <span class="text-gray-400">Database</span>
+                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
+                    </div>
+                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
+                        <span class="text-gray-400">Strategy</span>
+                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
+                    </div>
+                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
+                        <span class="text-gray-400">Risk Engine</span>
+                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
+                    </div>
+                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
+                        <span class="text-gray-400">Paper Broker</span>
+                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
+                    </div>
+                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
+                        <span class="text-gray-400">FastAPI</span>
+                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
+                    </div>
+                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
+                        <span class="text-gray-400">Telegram</span>
+                        <span class="text-emerald-400 font-bold">ONLINE 🟢</span>
+                    </div>
+                    <div class="bg-darkBg p-2 rounded border border-cardBorder flex items-center justify-between">
+                        <span class="text-gray-400">Live Trading</span>
+                        <span class="text-rose-400 font-bold">LOCKED 🔒</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Section: Active Signal Cards & Open Paper Positions -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- Latest Signal Card -->
+            <div class="glass-panel p-5 space-y-4">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
+                    <span>Generated Signals</span>
+                    <span class="badge bg-emerald-500/20 text-accentGreen">RSI DIVERGENCE</span>
+                </h2>
+
+                <div class="bg-darkBg p-4 rounded-lg border border-cardBorder space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="badge bg-emerald-500/20 text-accentGreen font-bold">LONG</span>
+                            <span class="font-bold text-white text-base">BTC / USDT</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs text-gray-400">Signal Score:</span>
+                            <span class="font-bold text-accentGreen ml-1">82 / 100</span>
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-gray-300">
+                        Bullish RSI Divergence: Price Lower Low ($63,800.00 &rarr; $63,650.00) with RSI Higher Low (31.2 &rarr; 38.6). High confluence score.
+                    </p>
+
+                    <div class="grid grid-cols-3 gap-2 text-xs font-mono text-center pt-2 border-t border-cardBorder">
+                        <div class="bg-cardBg p-2 rounded border border-cardBorder">
+                            <div class="text-gray-400 text-[10px] uppercase">Entry</div>
+                            <div class="font-bold text-white mt-0.5">$63,850.00</div>
+                        </div>
+                        <div class="bg-cardBg p-2 rounded border border-cardBorder">
+                            <div class="text-gray-400 text-[10px] uppercase">Stop Loss</div>
+                            <div class="font-bold text-accentRed mt-0.5">$63,350.00</div>
+                        </div>
+                        <div class="bg-cardBg p-2 rounded border border-cardBorder">
+                            <div class="text-gray-400 text-[10px] uppercase">Take Profit</div>
+                            <div class="font-bold text-accentGreen mt-0.5">$64,900.00</div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-center text-xs text-gray-400 pt-1">
+                        <span>Risk: <b>$25.00 (0.5%)</b></span>
+                        <span>R:R: <b class="text-accentGreen">1:2.1</b></span>
+                        <span>Status: <b class="text-blue-400">PAPER EXECUTED</b></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Paper Positions -->
+            <div class="glass-panel p-5 space-y-4">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center justify-between">
+                    <span>Active Paper Positions</span>
+                    <span class="badge bg-blue-500/20 text-accentBlue">SIMULATED</span>
+                </h2>
+
+                <div class="space-y-3">
+                    <div class="bg-darkBg p-4 rounded-lg border border-cardBorder space-y-2">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="badge bg-emerald-500/20 text-accentGreen">LONG</span>
+                                <span class="font-bold text-white">BTC / USDT</span>
+                                <span class="text-xs text-gray-400">Qty: 0.050000</span>
+                            </div>
+                            <div class="text-right font-mono font-bold text-accentGreen text-sm">
+                                +$37.10 (+1.16%)
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono pt-2 border-t border-cardBorder">
+                            <div>
+                                <span class="text-gray-400 text-[10px] block">ENTRY</span>
+                                <span class="text-white">$63,850.00</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 text-[10px] block">CURRENT</span>
+                                <span class="text-emerald-400">$64,250.00</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 text-[10px] block">STOP (BREAK-EVEN)</span>
+                                <span class="text-amber-400">$63,850.00</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 text-[10px] block">TAKE PROFIT</span>
+                                <span class="text-accentGreen">$64,900.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-cardBorder bg-cardBg px-6 py-3 text-xs text-gray-400 flex justify-between items-center">
+        <span>KRIPTO AGENT &copy; 2026 — Production-Oriented Paper Trading Architecture</span>
+        <div class="flex gap-4 font-mono">
+            <a href="/docs" class="text-accentBlue hover:underline">FastAPI Swagger Docs</a>
+            <span class="text-gray-600">|</span>
+            <span>EXPERIMENT: 7_DAY_5000_PAPER_TEST</span>
+        </div>
+    </footer>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toUTCString().slice(17, 25) + ' UTC';
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Periodically fetch live API state
+        async function fetchState() {
+            try {
+                const res = await fetch('/portfolio');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('equity').innerText = '$' + data.equity.toFixed(2);
+                    document.getElementById('balance').innerText = '$' + data.balance.toFixed(2);
+                    document.getElementById('daily-pnl').innerText = (data.daily_pnl >= 0 ? '+$' : '-$') + Math.abs(data.daily_pnl).toFixed(2);
+                    document.getElementById('drawdown').innerText = (data.max_drawdown * 100).toFixed(2) + '%';
+                }
+            } catch (e) {
+                console.log('Polling portfolio state...', e);
+            }
+        }
+        setInterval(fetchState, 5000);
+    </script>
+</body>
+</html>
