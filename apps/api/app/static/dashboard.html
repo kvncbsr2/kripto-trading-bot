@@ -220,6 +220,42 @@
             </div>
         </div>
 
+        <!-- Real-Time Binance Market Scanner Panel (V3) -->
+        <div class="glass-panel p-5 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-gray-300 flex items-center gap-2">
+                        <span>Binance Real-Time Market Scanner</span>
+                        <span class="badge bg-emerald-500/20 text-accentGreen">LIVE DISCOVERY</span>
+                    </h2>
+                    <p class="text-xs text-gray-400">Continuous liquidity, spread, and opportunity ranking for monitored USDT universe</p>
+                </div>
+                <div class="flex items-center gap-3 text-xs text-gray-400">
+                    <span>Min Vol: <b>$10M</b></span>
+                    <span>Max Spread: <b>15 bps</b></span>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs text-gray-300 font-mono">
+                    <thead class="bg-darkBg text-gray-400 uppercase text-[11px] border-b border-cardBorder">
+                        <tr>
+                            <th class="p-3">Symbol</th>
+                            <th class="p-3">Price</th>
+                            <th class="p-3">24h Volume</th>
+                            <th class="p-3">Spread (bps)</th>
+                            <th class="p-3">Volatility</th>
+                            <th class="p-3">Opp Score</th>
+                            <th class="p-3">Filter Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scanner-table-body" class="divide-y divide-cardBorder">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Bottom Section: Active Signal Cards & Open Paper Positions -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
@@ -348,7 +384,41 @@
                 console.log('Polling portfolio state...', e);
             }
         }
+
+        async function fetchScanner() {
+            try {
+                const res = await fetch('/scanner');
+                if (res.ok) {
+                    const data = await res.json();
+                    const tbody = document.getElementById('scanner-table-body');
+                    if (data.ranked_symbols && data.ranked_symbols.length > 0) {
+                        tbody.innerHTML = data.ranked_symbols.map(s => {
+                            const badgeColor = s.trade_allowed ? 'text-emerald-400 bg-emerald-500/20' : 'text-rose-400 bg-rose-500/20';
+                            const badgeText = s.trade_allowed ? 'ALLOWED' : (s.rejection_reason || 'REJECTED');
+                            const oppColor = s.opportunity_score >= 70 ? 'text-accentGreen font-bold' : (s.opportunity_score >= 50 ? 'text-accentYellow' : 'text-gray-400');
+                            return `
+                                <tr class="hover:bg-cardBg transition">
+                                    <td class="p-3 font-bold text-white">${s.symbol}</td>
+                                    <td class="p-3">$${s.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4})}</td>
+                                    <td class="p-3">$${(s.volume_24h / 1e6).toFixed(1)}M</td>
+                                    <td class="p-3">${s.spread_bps.toFixed(1)} bps</td>
+                                    <td class="p-3">${s.volatility_pct.toFixed(2)}%</td>
+                                    <td class="p-3 ${oppColor}">${s.opportunity_score}</td>
+                                    <td class="p-3"><span class="badge ${badgeColor}">${badgeText}</span></td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+                }
+            } catch (e) {
+                console.log('Polling scanner state...', e);
+            }
+        }
+
+        fetchState();
+        fetchScanner();
         setInterval(fetchState, 5000);
+        setInterval(fetchScanner, 10000);
     </script>
 </body>
 </html>

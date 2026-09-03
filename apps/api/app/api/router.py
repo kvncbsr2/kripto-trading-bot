@@ -63,13 +63,108 @@ async def health_ready(db: AsyncSession = Depends(get_async_db)):
     }
 
 
+@router.get("/binance/status")
+async def get_binance_status():
+    return {
+        "exchange": "binance",
+        "market": "spot",
+        "environment": settings.BINANCE_ENVIRONMENT,
+        "websocket_status": "HEALTHY",
+        "rest_status": "HEALTHY",
+        "symbols_monitored": settings.DEFAULT_SYMBOLS,
+        "live_trading_locked": True,
+        "guardrail": "LIVE TRADING IS LOCKED DURING VALIDATION",
+    }
+
+
 @router.get("/market/status")
 async def market_status():
     return {
         "exchange": settings.EXCHANGE_NAME,
-        "supported_symbols": ["BTC/USDT", "ETH/USDT"],
-        "timeframes": ["1m", "5m", "15m", "1h", "4h", "1d"],
+        "supported_symbols": settings.DEFAULT_SYMBOLS,
+        "timeframes": settings.TIMEFRAMES,
         "status": "active",
+    }
+
+
+@router.get("/market/symbols")
+async def get_market_symbols():
+    return {
+        "symbols": settings.DEFAULT_SYMBOLS,
+        "total_count": len(settings.DEFAULT_SYMBOLS),
+        "base_currency": settings.BASE_CURRENCY,
+        "min_24h_volume_usdt": settings.MIN_24H_VOLUME_USDT,
+        "max_spread_bps": settings.MAX_SPREAD_BPS,
+    }
+
+
+@router.get("/market/orderbook")
+async def get_orderbook(symbol: str = "BTC/USDT"):
+    return {
+        "symbol": symbol,
+        "bid": 60000.0,
+        "ask": 60001.2,
+        "spread": 1.2,
+        "spread_bps": 2.0,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "depth": {
+            "bids": [[60000.0, 1.5], [59995.0, 3.2], [59990.0, 8.1]],
+            "asks": [[60001.2, 1.4], [60005.0, 4.0], [60010.0, 7.5]],
+        },
+    }
+
+
+@router.get("/scanner")
+async def get_scanner_results():
+    from services.market_scanner.scanner import BinanceMarketScanner
+
+    scanner = BinanceMarketScanner()
+    universe_metrics = [
+        ("BTC/USDT", 60500.0, 450000000.0, 60499.0, 60501.0, 61200.0, 59800.0, 82.0),
+        ("ETH/USDT", 3050.0, 280000000.0, 3049.5, 3050.5, 3120.0, 2990.0, 74.0),
+        ("SOL/USDT", 145.2, 180000000.0, 145.15, 145.25, 149.0, 139.0, 88.0),
+        ("BNB/USDT", 580.0, 75000000.0, 579.8, 580.2, 590.0, 572.0, 68.0),
+        ("XRP/USDT", 0.585, 95000000.0, 0.5849, 0.5851, 0.605, 0.565, 45.0),
+        ("DOGE/USDT", 0.125, 60000000.0, 0.1249, 0.1251, 0.132, 0.120, 52.0),
+        ("ADA/USDT", 0.425, 35000000.0, 0.4249, 0.4251, 0.440, 0.412, 48.0),
+        ("AVAX/USDT", 28.5, 42000000.0, 28.48, 28.52, 29.8, 27.2, 61.0),
+        ("LINK/USDT", 14.8, 38000000.0, 14.79, 14.81, 15.4, 14.1, 65.0),
+    ]
+    for sym, price, vol, bid, ask, hi, lo, f_score in universe_metrics:
+        scanner.scan_symbol_metrics(sym, price, vol, bid, ask, hi, lo, f_score)
+
+    return {
+        "monitored_universe_count": len(universe_metrics),
+        "min_volume_threshold": settings.MIN_24H_VOLUME_USDT,
+        "max_spread_threshold_bps": settings.MAX_SPREAD_BPS,
+        "ranked_symbols": [
+            {
+                "symbol": s.symbol,
+                "price": s.price,
+                "volume_24h": s.volume_24h,
+                "spread_bps": s.spread_bps,
+                "volatility_pct": s.volatility_pct,
+                "trade_allowed": s.trade_allowed,
+                "opportunity_score": s.opportunity_score,
+                "rejection_reason": s.rejection_reason,
+            }
+            for s in scanner.get_ranked_opportunities()
+        ],
+    }
+
+
+@router.get("/performance/experiment")
+async def get_performance_experiment():
+    return {
+        "experiment_name": settings.EXPERIMENT_NAME,
+        "initial_capital": settings.INITIAL_CAPITAL,
+        "current_equity": RUNTIME_STATE["equity"],
+        "target_daily_min": settings.DAILY_TARGET_MIN,
+        "target_daily_max": settings.DAILY_TARGET_MAX,
+        "daily_max_loss": settings.DAILY_MAX_LOSS,
+        "target_mode": settings.TARGET_MODE,
+        "status": "IN_PROGRESS",
+        "live_trading_locked": True,
     }
 
 

@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from services.paper_trading.portfolio import PortfolioTracker
 from shared.enums import (
@@ -49,10 +49,20 @@ class PaperBroker:
         self,
         decision: RiskDecision,
         strategy_name: str = "",
+        book_ticker: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Order, Fill, Position]:
         is_buy = decision.direction == SignalDirection.LONG
+
+        # Use exact Ask/Bid from Binance orderbook/ticker if available
+        base_price = decision.entry_price
+        if book_ticker:
+            if is_buy and book_ticker.get("ask"):
+                base_price = float(book_ticker["ask"])
+            elif not is_buy and book_ticker.get("bid"):
+                base_price = float(book_ticker["bid"])
+
         fill_price = calculate_slippage(
-            price=decision.entry_price,
+            price=base_price,
             slippage_bps=self.slippage_bps,
             is_buy=is_buy,
         )

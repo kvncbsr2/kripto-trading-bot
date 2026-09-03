@@ -193,6 +193,12 @@ def run_7day_validation_experiment():
     print(f"  $50/day target hit:   {final_report['target_hits']['target_50_hit_rate']}")
     print(f"  $100/day target hit:  {final_report['target_hits']['target_100_hit_rate']}")
     print(f"Strategy Contributions: {final_report['strategy_contributions']}")
+    print(f"Coin Contributions:     {final_report['coin_contributions']}")
+    print(f"Best Strategy:          {final_report['best_strategy']}")
+    print(f"Worst Strategy:         {final_report['worst_strategy']}")
+    print(f"Best Coin:              {final_report['best_coin']}")
+    print(f"Worst Coin:             {final_report['worst_coin']}")
+    print("--------------------------------------------------------------------------------")
     print("Sensitivity Analysis:")
     print(
         f"  Fees +25% Net PnL:    ${final_report['sensitivity_analysis']['fee_plus_25pct_net_pnl']:.2f}"

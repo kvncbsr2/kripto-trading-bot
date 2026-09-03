@@ -67,11 +67,21 @@ class ExperimentJournal:
 
         # Strategy breakdown
         strategy_pnl: Dict[str, float] = {}
+        coin_pnl: Dict[str, float] = {}
         for p in all_closed_positions:
             strat = p.strategy or "unknown"
             strategy_pnl[strat] = strategy_pnl.get(strat, 0.0) + p.realized_pnl
+            coin_pnl[p.symbol] = coin_pnl.get(p.symbol, 0.0) + p.realized_pnl
+
         for k in strategy_pnl:
             strategy_pnl[k] = round(strategy_pnl[k], 2)
+        for k in coin_pnl:
+            coin_pnl[k] = round(coin_pnl[k], 2)
+
+        best_strategy = max(strategy_pnl.items(), key=lambda x: x[1])[0] if strategy_pnl else "N/A"
+        worst_strategy = min(strategy_pnl.items(), key=lambda x: x[1])[0] if strategy_pnl else "N/A"
+        best_coin = max(coin_pnl.items(), key=lambda x: x[1])[0] if coin_pnl else "N/A"
+        worst_coin = min(coin_pnl.items(), key=lambda x: x[1])[0] if coin_pnl else "N/A"
 
         # Sensitivity Analysis: +25% Fees, 2x Slippage
         original_fees = metrics["total_fees"]
@@ -110,6 +120,11 @@ class ExperimentJournal:
                 "target_100_hit_rate": f"{hits_100} / {len(daily_journals)} days",
             },
             "strategy_contributions": strategy_pnl,
+            "coin_contributions": coin_pnl,
+            "best_strategy": best_strategy,
+            "worst_strategy": worst_strategy,
+            "best_coin": best_coin,
+            "worst_coin": worst_coin,
             "sensitivity_analysis": {
                 "fee_plus_25pct_net_pnl": fee_stress_net_pnl,
                 "slippage_2x_net_pnl": slippage_stress_net_pnl,

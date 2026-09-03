@@ -44,13 +44,30 @@ class Settings(BaseSettings):
     MAKER_FEE: float = 0.001  # 0.1%
     TAKER_FEE: float = 0.001  # 0.1%
     SLIPPAGE_BPS: float = 5.0  # 5 bps
+    MAX_SPREAD_BPS: float = 15.0  # Max spread 15 bps
+    MIN_24H_VOLUME_USDT: float = 10000000.0  # Min $10M 24h volume
+    BINANCE_ENVIRONMENT: str = "production_market_data"
 
     # Strategy & Signal Tuning
     ATR_SL_MULTIPLIER: float = 1.5
     MIN_RISK_REWARD: float = 1.5
     PREFERRED_RISK_REWARD: float = 2.0
-    MIN_SIGNAL_SCORE: float = 55.0
+    MIN_SIGNAL_SCORE: float = 70.0
     MIN_OPPORTUNITY_SCORE: float = 50.0
+
+    # Market Universe
+    DEFAULT_SYMBOLS: list[str] = [
+        "BTC/USDT",
+        "ETH/USDT",
+        "BNB/USDT",
+        "SOL/USDT",
+        "XRP/USDT",
+        "DOGE/USDT",
+        "ADA/USDT",
+        "AVAX/USDT",
+        "LINK/USDT",
+    ]
+    TIMEFRAMES: list[str] = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
     # Telegram
     TELEGRAM_BOT_TOKEN: Optional[str] = None
