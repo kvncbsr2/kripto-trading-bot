@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.tables import (
@@ -14,6 +14,7 @@ from database.models.tables import (
     SignalModel,
 )
 from database.session import get_async_db
+from services.monitoring.metrics import get_prometheus_metrics
 from services.performance_engine.journal import ExperimentJournal
 from shared.config import get_settings
 from shared.schemas import Position
@@ -21,7 +22,7 @@ from shared.schemas import Position
 router = APIRouter()
 settings = get_settings()
 
-# In-memory shared state for live runtime demo
+# In-memory shared state for live runtime demo (Sections 58 & 59)
 RUNTIME_STATE: Dict[str, Any] = {
     "balance": settings.INITIAL_CAPITAL,
     "equity": settings.INITIAL_CAPITAL,
@@ -31,14 +32,22 @@ RUNTIME_STATE: Dict[str, Any] = {
     "closed_positions": [],
     "recent_signals": [],
     "is_halted": False,
+    "system_state": "TRADING",  # STARTING, CONNECTING, SYNCING, READY, TRADING, PAUSED, RISK_LOCK, DATA_STALE, ERROR, SHUTDOWN
     "circuit_state": "NORMAL",
 }
+
+
+@router.get("/metrics")
+async def get_metrics():
+    """Prometheus metrics endpoint."""
+    return Response(content=get_prometheus_metrics(), media_type="text/plain; version=0.0.4")
 
 
 @router.get("/health")
 async def health():
     return {
         "status": "ok",
+        "system_state": RUNTIME_STATE["system_state"],
         "live_trading": settings.LIVE_TRADING,
         "paper_trading": settings.PAPER_TRADING,
         "experiment": settings.EXPERIMENT_NAME,

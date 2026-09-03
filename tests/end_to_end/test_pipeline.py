@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -14,18 +14,23 @@ from shared.schemas import Candle
 
 @pytest.mark.asyncio
 async def test_complete_end_to_end_trading_pipeline():
-    # 1. Market Data generation (Healthy Bullish sequence with pullbacks)
+    # 1. Market Data generation (Healthy Bullish sequence with pullback to support)
+    base_time = datetime(2026, 9, 1, 0, 0, tzinfo=timezone.utc)
     base_price = 60000.0
     candles = []
     current_price = base_price
-    for i in range(55):
-        # 2 bars up, 1 bar slight pullback
-        change = 40.0 if (i % 3 != 0) else -15.0
+    for i in range(60):
+        if i < 35:
+            change = 30.0 if i % 2 == 0 else -10.0
+        elif i < 48:
+            change = -15.0 if i % 2 == 0 else 5.0  # pullback / consolidation
+        else:
+            change = 25.0 if i % 2 == 0 else -5.0  # breakout resumption
         current_price += change
         c = Candle(
             symbol="BTC/USDT",
             timeframe=Timeframe.M15,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=base_time + timedelta(minutes=15 * i),
             open=current_price - 10,
             high=current_price + 25,
             low=current_price - 15,
