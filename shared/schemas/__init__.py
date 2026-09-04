@@ -177,6 +177,7 @@ class Position(BaseModel):
     closed_at: Optional[datetime] = None
     fees_paid: float = 0.0
     strategy: str = ""
+    peak_price: Optional[float] = None
 
 
 class PortfolioState(BaseModel):

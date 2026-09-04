@@ -967,6 +967,11 @@ async def get_system_status(db: AsyncSession = Depends(get_async_db)):
 # =====================================================================
 
 command_bus = CommandBus(runtime_state=RUNTIME_STATE)
+try:
+    from services.autonomous_runner import autonomous_trader
+    autonomous_trader.bind_command_bus(command_bus)
+except Exception as _e:
+    pass
 
 
 class RiskConfigRequest(BaseModel):
@@ -1007,6 +1012,54 @@ async def get_system_readiness(db: AsyncSession = Depends(get_async_db)):
 async def get_audit_logs():
     """Returns chronologically ordered audit logs of user actions."""
     return [e.model_dump() for e in reversed(command_bus.audit_log)]
+
+
+@router.get("/api/v1/agent/autonomous-status")
+async def get_autonomous_status():
+    """Returns real-time status of the autonomous background paper trader."""
+    from services.autonomous_runner import autonomous_trader
+    return {
+        "active": autonomous_trader.is_active,
+        "cycle_count": autonomous_trader.cycle_count,
+        "last_action": autonomous_trader.last_action,
+        "last_cycle_at": autonomous_trader.last_cycle_at,
+        "open_positions": len(command_bus.broker.open_positions) if command_bus.broker else 0,
+        "max_open_positions": RUNTIME_STATE.get("max_open_positions", 2),
+    }
+
+
+class AutonomousToggleRequest(BaseModel):
+    active: bool
+
+
+@router.post("/api/v1/agent/autonomous-toggle")
+async def post_autonomous_toggle(payload: AutonomousToggleRequest):
+    """Enables or disables autonomous paper trading."""
+    from services.autonomous_runner import autonomous_trader
+    autonomous_trader.is_active = payload.active
+    return {
+        "success": True,
+        "active": autonomous_trader.is_active,
+        "message": f"Otonom al-sat botu {'BAŞLATILDI' if payload.active else 'DURAKLATILDI'}.",
+    }
+
+
+class AutonomousTriggerRequest(BaseModel):
+    symbol: Optional[str] = None
+    side: Optional[str] = "BUY"
+
+
+@router.post("/api/v1/agent/autonomous-trigger")
+async def post_autonomous_trigger(payload: Optional[AutonomousTriggerRequest] = None):
+    """Triggers an instant autonomous paper trade cycle or symbol entry."""
+    from services.autonomous_runner import autonomous_trader
+    sym = payload.symbol if (payload and payload.symbol) else None
+    if sym:
+        is_long = (payload.side.upper() in ["BUY", "LONG"]) if payload else True
+        res = autonomous_trader.open_autonomous_trade(symbol=sym, is_long=is_long)
+    else:
+        res = await autonomous_trader.step_cycle()
+    return res
 
 
 @router.get("/api/ai/agents")
@@ -1071,6 +1124,7 @@ async def post_update_risk_config(payload: RiskConfigRequest):
     return command_bus.execute_update_risk_config(payload.model_dump(exclude_none=True))
 
 
+@router.post("/api/v1/positions/{symbol:path}/close")
 @router.post("/api/positions/{symbol:path}/close")
 async def post_close_position(symbol: str, payload: Optional[ClosePositionRequest] = None):
     """Simulates immediate position close through Paper Broker."""

@@ -136,22 +136,55 @@ class PaperBroker:
 
         self.portfolio.update_market_price(symbol, close)
 
-        # Break-Even & Trailing Stop logic
+        # Break-Even & Trailing 50% Peak Profit Lock logic (Video Min 8:27)
         if self.enable_trailing_stop:
             risk_dist = abs(pos.entry_price - pos.stop_loss)
+            if pos.peak_price is None:
+                pos.peak_price = pos.entry_price
+
             if pos.side == PositionSide.LONG:
-                # If price moves +1.0R in profit, move stop loss to break-even (entry)
+                if high > pos.peak_price:
+                    pos.peak_price = high
+
+                peak_gain = pos.peak_price - pos.entry_price
+                # 1. Break-even check (+1.0R)
                 if high >= pos.entry_price + risk_dist and pos.stop_loss < pos.entry_price:
                     pos.stop_loss = pos.entry_price
                     logger.info(
                         f"Stop-Loss adjusted to BREAK-EVEN for {symbol} LONG @ {pos.entry_price:.2f}"
                     )
+
+                # 2. Peak Profit Lock: If gained >= 1.0R, protect 50% of peak profit from pullback
+                if peak_gain >= risk_dist and peak_gain > 0:
+                    lock_price = pos.peak_price - (peak_gain * 0.5)
+                    if lock_price > pos.stop_loss:
+                        pos.stop_loss = round(lock_price, 4)
+                        logger.info(
+                            f"Trailing Profit Lock: {symbol} LONG stop raised to ${pos.stop_loss:.2f} "
+                            f"(Protecting 50% of peak gain +${peak_gain:.2f})"
+                        )
+
             elif pos.side == PositionSide.SHORT:
+                if low < pos.peak_price:
+                    pos.peak_price = low
+
+                peak_gain = pos.entry_price - pos.peak_price
+                # 1. Break-even check (+1.0R)
                 if low <= pos.entry_price - risk_dist and pos.stop_loss > pos.entry_price:
                     pos.stop_loss = pos.entry_price
                     logger.info(
                         f"Stop-Loss adjusted to BREAK-EVEN for {symbol} SHORT @ {pos.entry_price:.2f}"
                     )
+
+                # 2. Peak Profit Lock: If gained >= 1.0R, protect 50% of peak profit from pullback
+                if peak_gain >= risk_dist and peak_gain > 0:
+                    lock_price = pos.peak_price + (peak_gain * 0.5)
+                    if lock_price < pos.stop_loss:
+                        pos.stop_loss = round(lock_price, 4)
+                        logger.info(
+                            f"Trailing Profit Lock: {symbol} SHORT stop lowered to ${pos.stop_loss:.2f} "
+                            f"(Protecting 50% of peak gain +${peak_gain:.2f})"
+                        )
 
         hit_reason: Optional[str] = None
         exit_price: float = 0.0

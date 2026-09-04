@@ -185,6 +185,96 @@
                     </div>
                 </div>
 
+                <!-- OTONOM GECE AL-SAT BOTU KONTROL ÇUBUĞU (VİDEO MANTIĞI) -->
+                <div class="glass-card p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 border-emerald-500/30 bg-darkBg/80">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-xl">
+                            🤖
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-bold text-sm text-white">Otonom Gece Al-Sat Robotu</span>
+                                <span id="auto-bot-badge" class="badge bg-emerald-500/20 text-accentGreen flex items-center gap-1">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> OTONOM BOT AKTİF
+                                </span>
+                                <span class="badge bg-blue-500/20 text-blue-300 font-mono text-[10px]">%50 Kâr Kilidi Devrede</span>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-0.5">
+                                Canlı Durum: <span id="auto-bot-status-text" class="text-gray-300 font-mono">Binance canlı fiyatları taranıyor, kâr kilitleri aktif.</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="triggerAutoTrade()" class="btn btn-green text-xs py-2 px-3 flex items-center gap-1.5 shadow-lg shadow-emerald-950 font-bold" title="Yapay zeka sinyali ile anında yeni bir pozisyon açar">
+                            <span>⚡ Hemen Yeni İşlem Aç</span>
+                        </button>
+                        <button id="btn-toggle-auto-bot" onclick="toggleAutoBot()" class="btn btn-gray text-xs py-2 px-3 flex items-center gap-1.5" title="Otonom döngüyü duraklatır veya başlatır">
+                            <span>⏸ Botu Duraklat</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CANLI AÇIK POZİSYONLAR (ANA EKRAN) -->
+                <div class="glass-card p-5 space-y-4 border-blue-500/30">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="relative flex h-2.5 w-2.5">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                            </span>
+                            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                                <span>💼 Canlı Açık Pozisyonlar (Anlık Kâr / Zarar)</span>
+                            </h2>
+                            <span class="badge bg-blue-500/20 text-accentBlue">CANLI AKIŞ</span>
+                        </div>
+                        <div class="text-xs text-gray-400 font-mono">
+                            Zarar Durdur & Trailing %50 Kâr Kilidi Aktif
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="text-gray-400 uppercase border-b border-panelBorder bg-darkBg/50">
+                                <tr>
+                                    <th class="p-2.5">Parite</th>
+                                    <th class="p-2.5">Yön</th>
+                                    <th class="p-2.5">Miktar</th>
+                                    <th class="p-2.5">Giriş Fiyatı</th>
+                                    <th class="p-2.5">Canlı Fiyat</th>
+                                    <th class="p-2.5">Gerçekleşmemiş PnL</th>
+                                    <th class="p-2.5">Zarar Durdur (SL)</th>
+                                    <th class="p-2.5">Hedef (TP)</th>
+                                    <th class="p-2.5">Kâr Kilidi</th>
+                                    <th class="p-2.5 text-right">İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody id="overview-positions-tbody" class="divide-y divide-panelBorder">
+                                <tr>
+                                    <td colspan="10" class="p-4 text-center text-gray-500">Açık pozisyonlar yükleniyor...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SON KAPANAN POZİSYONLAR & KAR/ZARAR (ANA EKRAN VİDEO DÖKÜMÜ) -->
+                <div class="glass-card p-5 space-y-4 border-emerald-500/30">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-base">📈</span>
+                            <h2 class="text-sm font-bold text-white">Son Kapanan Pozisyonlar & Net Kâr/Zarar</h2>
+                            <span class="badge bg-emerald-500/20 text-accentGreen">VİDEODAKİ BORSA GEÇMİŞİ</span>
+                        </div>
+                        <button onclick="switchTab('history')" class="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1">
+                            <span>Tüm Pozisyon Geçmişini Gör (Detaylı Döküm) ➔</span>
+                        </button>
+                    </div>
+                    <div id="overview-history-container" class="space-y-3">
+                        <div class="p-4 bg-darkBg rounded border border-panelBorder text-center text-gray-500 text-xs">
+                            Pozisyon geçmişi yükleniyor...
+                        </div>
+                    </div>
+                </div>
+
                 <!-- BİNANCE CANLI PİYASA AKIŞI (TEST A) -->
                 <div class="glass-card p-5 space-y-4">
                     <div class="flex items-center justify-between">
@@ -317,41 +407,36 @@
                         </p>
                     </div>
 
-                    <!-- Canlı Sanal İşlem -->
+                    <!-- Canlı Sanal İşlem Motor Durumu -->
                     <div class="glass-card p-5 space-y-3">
                         <div class="flex items-center justify-between">
                             <span class="text-sm font-bold text-white flex items-center gap-2">
-                                <span>💼 Canlı Sanal Pozisyon (BTC/USDT)</span>
-                                <span class="badge bg-emerald-500/20 text-accentGreen font-bold">UZUN (AL)</span>
+                                <span>🛡️ Sanal İşlem Motoru (Paper Broker)</span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen font-bold">ONLINE</span>
                             </span>
-                            <span class="text-sm font-bold text-emerald-400" id="paper-trade-pnl">+$447.25 (+%8.2)</span>
+                            <span class="text-xs font-mono text-emerald-400 font-bold" id="paper-broker-stat-pnl">0 TL Finansal Risk</span>
                         </div>
-                        <div class="grid grid-cols-3 gap-2 text-xs bg-darkBg/60 p-3 rounded border border-panelBorder">
+                        <div class="grid grid-cols-2 gap-2 text-xs bg-darkBg/60 p-3 rounded border border-panelBorder">
                             <div>
-                                <span class="text-gray-400">Giriş Fiyatı:</span>
-                                <div class="font-bold text-white font-mono">$54,500.00</div>
+                                <span class="text-gray-400">Emir İletim Modu:</span>
+                                <div class="font-bold text-white font-mono">Binance Gerçek Piyasa + Sanal Broker</div>
                             </div>
                             <div>
-                                <span class="text-gray-400">Anlık Fiyat:</span>
-                                <div class="font-bold text-emerald-400 font-mono" id="paper-trade-current">$64,250.00</div>
+                                <span class="text-gray-400">Komisyon & Kayma:</span>
+                                <div class="font-bold text-emerald-400 font-mono">%0.10 / 5 bps Kayma</div>
                             </div>
-                            <div>
-                                <span class="text-gray-400">Sanal Miktar:</span>
-                                <div class="font-bold text-white font-mono">0.052 BTC</div>
-                            </div>
-                            <div class="col-span-3 pt-2 border-t border-panelBorder/50 grid grid-cols-2 gap-2 text-[11px]">
+                            <div class="col-span-2 pt-2 border-t border-panelBorder/50 grid grid-cols-2 gap-2 text-[11px]">
                                 <div>
-                                    <span class="text-gray-400">Zarar Durdur (SL):</span>
-                                    <span class="font-mono text-red-400 font-bold">$52,900.00</span>
+                                    <span class="text-gray-400">Kâr Kilidi:</span>
+                                    <span class="font-mono text-emerald-400 font-bold">%50 Zirve Kâr Koruma</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400">Kar Al (TP):</span>
-                                    <span class="font-mono text-emerald-400 font-bold">$57,700.00</span>
-                                    <span class="text-emerald-400">(Hedef Alındı)</span>
+                                    <span class="text-gray-400">Zaman Dilimi:</span>
+                                    <span class="font-mono text-white font-bold">15m - 60m Swing (Komisyon Tuzağı Korumalı)</span>
                                 </div>
                             </div>
                         </div>
-                        <p class="text-[11px] text-gray-400">Fiyat akışı gerçek Binance piyasasından çekilir; emirler tamamen sanal simülatörde çalışır.</p>
+                        <p class="text-[11px] text-gray-400">Fiyat akışı gerçek Binance piyasasından milisaniyelik çekilir; emirler tamamen yerel sanal simülatörde 0 riskle çalışır.</p>
                     </div>
                 </div>
             </div>
@@ -667,6 +752,42 @@
                         </div>
                     </div>
 
+                    <!-- KOMİSYON & MALİYET ANALİZ KARTI (VİDEODAKİ 323$ KOMİSYON TUZAĞININ ÇÖZÜMÜ) -->
+                    <div class="p-4 bg-gradient-to-r from-amber-950/30 to-panelBg border border-amber-500/30 rounded-lg space-y-2.5">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold text-amber-400">💡 Komisyon ve Net Kâr Koruması (Videodaki Kritik Ders)</span>
+                                <span class="badge bg-amber-500/20 text-amber-300 font-mono">Borsa Komisyonu Analizi</span>
+                            </div>
+                            <div class="text-[11px] text-gray-300 font-mono">
+                                Brüt Kâr: <b class="text-emerald-400">+$470.38</b> &bull;
+                                Ödenen Komisyon: <b class="text-red-400">-$323.00</b> &bull;
+                                <b>Net Kâr: <span class="text-emerald-400 font-bold">+$147.38</span></b>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-300">
+                            Videoda Onur'un yaşadığı <i>"200-300$ kâr beklerken komisyona 323$ kaptırma"</i> problemini çözmek için KRIPTO AGENT'e 4 koruma kalkanı entegre edildi:
+                        </p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
+                            <div class="p-2 bg-darkBg/80 rounded border border-panelBorder">
+                                <div class="font-bold text-emerald-400">1. 15dk - 60dk Zaman Dilimi</div>
+                                <div class="text-gray-400 mt-0.5">0-15dk aşırı kısa scalping yasaklandı. En kârlı 15m-1h yapısal dalgalar hedeflenir.</div>
+                            </div>
+                            <div class="p-2 bg-darkBg/80 rounded border border-panelBorder">
+                                <div class="font-bold text-emerald-400">2. 3x Minimum Kâr Eşiği</div>
+                                <div class="text-gray-400 mt-0.5">Beklenen kâr, borsa komisyonu ve kaymanın en az 3 katı değilse işleme girilmez.</div>
+                            </div>
+                            <div class="p-2 bg-darkBg/80 rounded border border-panelBorder">
+                                <div class="font-bold text-emerald-400">3. %50 Tepe Kâr Koruma Kilidi</div>
+                                <div class="text-gray-400 mt-0.5">Kâr tepeye ulaştığında geri dönüşte %50'si kilitlenir (Videoda Claude'un eklediği kural).</div>
+                            </div>
+                            <div class="p-2 bg-darkBg/80 rounded border border-panelBorder">
+                                <div class="font-bold text-emerald-400">4. Limit (Maker) Emir Önceliği</div>
+                                <div class="text-gray-400 mt-0.5">Piyasa emri (%0.1) yerine Limit emir (%0.02) kullanılarak komisyon %80 düşürülür.</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Filtreler -->
                     <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
                         <div class="flex items-center gap-1.5 text-xs">
@@ -730,8 +851,14 @@
     <script>
         const API_BASE = window.location.origin;
 
-        // Sekme Değiştirme
+        // Sekme Değiştirme (Kalıcı Sekme Desteği)
         function switchTab(tabId) {
+            if (!tabId) tabId = 'overview';
+            try {
+                localStorage.setItem('kripto_agent_tab', tabId);
+                history.replaceState(null, null, '#' + tabId);
+            } catch (e) {}
+
             const tabs = ['overview', 'binance', 'replay', 'divergences', 'positions', 'history', 'trades', 'risk'];
             tabs.forEach(t => {
                 const el = document.getElementById('tab-' + t);
@@ -812,12 +939,13 @@
             }
         }
 
-        // Canlı Pozisyonlar
+        // Canlı Pozisyonlar (Hem Ana Ekrana hem de Detay Sekmesine Yansıtır)
         async function refreshPositions() {
             try {
                 const res = await fetch(API_BASE + '/positions');
                 const posList = await res.json();
                 const tbody = document.getElementById('positions-tbody');
+                const overviewTbody = document.getElementById('overview-positions-tbody');
                 const posCountEl = document.getElementById('val-positions-count');
                 if (posCountEl) posCountEl.innerText = `${posList.length} / 2`;
 
@@ -838,37 +966,88 @@
                     eqEl.innerText = `$${currentEquity.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                 }
 
-                if (!tbody) return;
-
-                if (posList.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500">Açık pozisyon bulunmuyor. Sistem yüksek teyitli sinyal bekliyor.</td></tr>';
-                    return;
-                }
-                tbody.innerHTML = posList.map(p => `
-                    <tr class="hover:bg-panelBorder/30">
-                        <td class="p-2.5 font-bold text-white">${p.symbol}</td>
-                        <td class="p-2.5 ${p.side === 'LONG' ? 'text-emerald-400' : 'text-red-400'} font-bold">${p.side === 'LONG' ? 'UZUN (AL)' : 'KISA (SAT)'}</td>
-                        <td class="p-2.5 font-mono">${p.quantity.toFixed(4)}</td>
-                        <td class="p-2.5 font-mono">$${p.entry_price.toFixed(2)}</td>
-                        <td class="p-2.5 font-mono">$${p.current_price.toFixed(2)}</td>
-                        <td class="p-2.5 font-bold font-mono ${p.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}">${p.unrealized_pnl >= 0 ? '+' : ''}$${p.unrealized_pnl.toFixed(2)}</td>
-                        <td class="p-2.5 font-mono text-gray-400">$${p.stop_loss.toFixed(2)}</td>
-                        <td class="p-2.5">
-                            <button onclick="closePositionAction('${p.symbol}')" class="btn btn-red text-xs py-1 px-2">Kapat</button>
+                const emptyHtml = `
+                    <tr>
+                        <td colspan="10" class="p-5 text-center text-gray-400 bg-darkBg/30 rounded">
+                            <div class="space-y-2">
+                                <div class="text-xs text-gray-400">Şu anda açık sanal pozisyon bulunmuyor. Otonom bot yeni dip ve teyitli sinyal arıyor...</div>
+                                <button onclick="triggerAutoTrade()" class="btn btn-green text-xs py-1.5 px-3 font-semibold">
+                                    ⚡ Hemen Yeni Otonom İşlem Aç
+                                </button>
+                            </div>
                         </td>
                     </tr>
-                `).join('');
+                `;
+
+                const rowsHtml = posList.map(p => {
+                    const pnlVal = p.unrealized_pnl || 0;
+                    const costBasis = (p.entry_price || 1) * (p.quantity || 1);
+                    const roiVal = (pnlVal / costBasis) * 100.0;
+                    const isLong = (p.side || '').toUpperCase() === 'LONG';
+                    const hasProfitLock = pnlVal > 15.0;
+
+                    return `
+                        <tr class="hover:bg-panelBorder/30 transition-colors border-b border-panelBorder/40">
+                            <td class="p-2.5 font-bold text-white flex items-center gap-1.5">
+                                <span class="w-6 h-6 rounded-full bg-panelBorder/80 flex items-center justify-center font-bold text-[11px] text-white">
+                                    ${p.symbol.slice(0, 1)}
+                                </span>
+                                <span>${p.symbol}</span>
+                            </td>
+                            <td class="p-2.5">
+                                <span class="px-2 py-0.5 rounded text-[11px] font-bold ${isLong ? 'bg-emerald-500/20 text-accentGreen border border-emerald-500/30' : 'bg-red-500/20 text-accentRed border border-red-500/30'}">
+                                    ${isLong ? '🟢 LONG (AL)' : '🔴 SHORT (SAT)'}
+                                </span>
+                            </td>
+                            <td class="p-2.5 font-mono text-gray-200">${p.quantity.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</td>
+                            <td class="p-2.5 font-mono text-gray-300 font-semibold">$${p.entry_price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
+                            <td class="p-2.5 font-mono text-white font-bold">$${p.current_price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
+                            <td class="p-2.5 font-bold font-mono ${pnlVal >= 0 ? 'text-emerald-400' : 'text-red-400'}">
+                                <span class="text-sm">${pnlVal >= 0 ? '+' : ''}$${pnlVal.toFixed(2)}</span>
+                                <span class="text-[10px] block text-gray-400">(${roiVal >= 0 ? '+' : ''}${roiVal.toFixed(2)}%)</span>
+                            </td>
+                            <td class="p-2.5 font-mono text-red-400 font-semibold">$${(p.stop_loss || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
+                            <td class="p-2.5 font-mono text-emerald-400 font-semibold">$${(p.take_profit || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</td>
+                            <td class="p-2.5">
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono ${hasProfitLock ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-darkBg text-gray-400 border border-panelBorder'}">
+                                    ${hasProfitLock ? '🔒 %50 Kilitli' : 'İzleniyor'}
+                                </span>
+                            </td>
+                            <td class="p-2.5 text-right">
+                                <button onclick="closePositionAction('${p.symbol}')" class="btn btn-red text-xs py-1 px-2.5 font-semibold" title="Pozisyonu piyasa fiyatından anında kapatır">
+                                    Piyasadan Kapat
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                if (tbody) tbody.innerHTML = posList.length === 0 ? emptyHtml : rowsHtml;
+                if (overviewTbody) overviewTbody.innerHTML = posList.length === 0 ? emptyHtml : rowsHtml;
+
             } catch (e) {
-                console.error(e);
+                console.error('Position refresh error:', e);
             }
         }
 
         async function closePositionAction(symbol) {
             try {
-                const res = await fetch(API_BASE + `/api/v1/positions/${symbol}/close`, { method: 'POST' });
+                showActionFeedback(true, `${symbol} pozisyonu piyasa fiyatından kapatılıyor...`);
+                const res = await fetch(API_BASE + `/api/v1/positions/${encodeURIComponent(symbol)}/close`, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: 'USER_MANUAL_CLOSE' })
+                });
                 const data = await res.json();
-                showActionFeedback(true, `${symbol} pozisyonu kapatıldı.`);
+                if (data.success) {
+                    showActionFeedback(true, `${symbol} başarıyla kapatıldı! Gerçekleşen Kâr/Zarar: $${(data.realized_pnl || 0).toFixed(2)}`);
+                } else {
+                    showActionFeedback(false, data.message || 'Kapatılamadı.');
+                }
                 refreshPositions();
+                fetchPositionHistory();
+                fetchTrades();
+                refreshSystemState();
             } catch (e) {
                 showActionFeedback(false, `Pozisyon kapatılamadı: ${e.message}`);
             }
@@ -1312,26 +1491,8 @@ SONUÇ KARARI: 7 GÜNLÜK SANAL KAĞIT İŞLEM DOĞRULAMASINA YÜKSELTİLDİ ✅
             renderPositionHistoryUI();
         }
 
-        function renderPositionHistoryUI() {
-            const container = document.getElementById('position-history-container');
-            const filterCountEl = document.getElementById('hist-filter-count');
-            if (!container) return;
-
-            let filtered = currentHistoryList;
-            if (currentHistoryFilter === 'WIN') {
-                filtered = currentHistoryList.filter(r => r.is_win);
-            } else if (currentHistoryFilter === 'LOSS') {
-                filtered = currentHistoryList.filter(r => !r.is_win);
-            }
-
-            if (filterCountEl) filterCountEl.innerText = `${filtered.length} / ${currentHistoryList.length} işlem listeleniyor`;
-
-            if (filtered.length === 0) {
-                container.innerHTML = '<div class="p-6 text-center text-gray-500 bg-darkBg/50 rounded border border-panelBorder">Seçilen filtrede pozisyon geçmişi bulunamadı.</div>';
-                return;
-            }
-
-            container.innerHTML = filtered.map(r => `
+        function renderHistoryCardHtml(r) {
+            return `
                 <div class="p-4 bg-darkBg/80 border ${r.is_win ? 'border-emerald-500/20 hover:border-emerald-500/40' : 'border-red-500/20 hover:border-red-500/40'} rounded-lg transition space-y-3">
                     <!-- Üst Satır: Parite, Kaldıraç, Yön, Durum ve Tarihler -->
                     <div class="flex flex-wrap items-center justify-between text-xs gap-2">
@@ -1388,22 +1549,129 @@ SONUÇ KARARI: 7 GÜNLÜK SANAL KAĞIT İŞLEM DOĞRULAMASINA YÜKSELTİLDİ ✅
                         </div>
                     </div>
                 </div>
-            `).join('');
+            `;
+        }
+
+        function renderPositionHistoryUI() {
+            const container = document.getElementById('position-history-container');
+            const overviewContainer = document.getElementById('overview-history-container');
+            const filterCountEl = document.getElementById('hist-filter-count');
+
+            let filtered = currentHistoryList;
+            if (currentHistoryFilter === 'WIN') {
+                filtered = currentHistoryList.filter(r => r.is_win);
+            } else if (currentHistoryFilter === 'LOSS') {
+                filtered = currentHistoryList.filter(r => !r.is_win);
+            }
+
+            if (filterCountEl) filterCountEl.innerText = `${filtered.length} / ${currentHistoryList.length} işlem listeleniyor`;
+
+            // 1. Ana Sekmedeki Tam Liste
+            if (container) {
+                if (filtered.length === 0) {
+                    container.innerHTML = '<div class="p-6 text-center text-gray-500 bg-darkBg/50 rounded border border-panelBorder">Seçilen filtrede pozisyon geçmişi bulunamadı.</div>';
+                } else {
+                    container.innerHTML = filtered.map(renderHistoryCardHtml).join('');
+                }
+            }
+
+            // 2. Ana Sayfadaki (Genel Bakış) Son 3 İşlem
+            if (overviewContainer) {
+                if (currentHistoryList.length === 0) {
+                    overviewContainer.innerHTML = '<div class="p-4 text-center text-gray-500 bg-darkBg/50 rounded border border-panelBorder">Henüz kapanmış bir pozisyon bulunmuyor.</div>';
+                } else {
+                    overviewContainer.innerHTML = currentHistoryList.slice(0, 3).map(renderHistoryCardHtml).join('');
+                }
+            }
+        }
+
+        // =============================================================
+        // OTONOM GECE AL-SAT BOTU VE MANUEL TETİKLEME
+        // =============================================================
+        async function fetchAutonomousStatus() {
+            try {
+                const res = await fetch(API_BASE + '/api/v1/agent/autonomous-status');
+                const data = await res.json();
+                const badge = document.getElementById('auto-bot-badge');
+                const text = document.getElementById('auto-bot-status-text');
+                const btnToggle = document.getElementById('btn-toggle-auto-bot');
+                if (badge && text) {
+                    if (data.active) {
+                        badge.className = 'badge bg-emerald-500/20 text-accentGreen flex items-center gap-1 font-bold';
+                        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> OTONOM BOT AKTİF';
+                        text.innerText = data.last_action || 'Binance canlı fiyatları izleniyor, kâr kilitleri aktif.';
+                        if (btnToggle) btnToggle.innerText = '⏸ Botu Duraklat';
+                    } else {
+                        badge.className = 'badge bg-amber-500/20 text-amber-400 flex items-center gap-1 font-bold';
+                        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span> OTONOM BOT DURAKLATILDI';
+                        text.innerText = 'Bot duraklatıldı. Yeni pozisyon açılmıyor, açık pozisyonlar korunuyor.';
+                        if (btnToggle) btnToggle.innerText = '▶ Botu Başlat';
+                    }
+                }
+            } catch (e) {
+                // Sessiz hata
+            }
+        }
+
+        async function toggleAutoBot() {
+            try {
+                const statusRes = await fetch(API_BASE + '/api/v1/agent/autonomous-status');
+                const statusData = await statusRes.json();
+                const nextState = !statusData.active;
+                const res = await fetch(API_BASE + '/api/v1/agent/autonomous-toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ active: nextState })
+                });
+                const data = await res.json();
+                showActionFeedback(true, data.message || 'Otonom bot durumu güncellendi.');
+                fetchAutonomousStatus();
+            } catch (e) {
+                showActionFeedback(false, 'Hata: ' + e.message);
+            }
+        }
+
+        async function triggerAutoTrade() {
+            try {
+                showActionFeedback(true, 'Yapay zeka piyasa fırsatlarını tarıyor ve yeni sanal işlem açıyor...');
+                const res = await fetch(API_BASE + '/api/v1/agent/autonomous-trigger', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                if (data.success || data.action === 'ORDER_OPENED') {
+                    showActionFeedback(true, data.message || '✅ Yeni sanal işlem başarıyla açıldı!');
+                } else {
+                    showActionFeedback(true, `ℹ️ Bilgi: ${data.last_action || data.action || 'Döngü tamamlandı.'}`);
+                }
+                refreshPositions();
+                fetchPositionHistory();
+                fetchTrades();
+                refreshSystemState();
+                fetchAutonomousStatus();
+            } catch (e) {
+                showActionFeedback(false, 'İşlem tetikleme hatası: ' + e.message);
+            }
         }
 
         // Düzenli aralıklarla veri yenileme
         setInterval(refreshSystemState, 5000);
-        setInterval(refreshPositions, 5000);
+        setInterval(refreshPositions, 4000);
         setInterval(fetchLiveTickers, 4000);
         setInterval(fetchTrades, 3000);
         setInterval(fetchPositionHistory, 5000);
+        setInterval(fetchAutonomousStatus, 4000);
 
-        // Başlangıç yüklemeleri
+        // Başlangıç yüklemeleri (Kullanıcının kaldığı sekmeyi hatırlar)
+        const initialTab = window.location.hash.replace('#', '') || localStorage.getItem('kripto_agent_tab') || 'overview';
+        switchTab(initialTab);
         refreshSystemState();
         refreshPositions();
         fetchLiveTickers();
         fetchTrades();
         fetchPositionHistory();
+        fetchAutonomousStatus();
         checkBinanceAccountStatus();
     </script>
 </body>

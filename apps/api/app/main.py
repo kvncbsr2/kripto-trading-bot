@@ -20,7 +20,24 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database schemas...")
     await init_models_async()
     logger.info("KRIPTO AGENT API started successfully.")
+
+    # Start Autonomous Paper Trader background loop
+    try:
+        from apps.api.app.api.router import command_bus
+        from services.autonomous_runner import autonomous_trader
+        autonomous_trader.bind_command_bus(command_bus)
+        autonomous_trader.start()
+        logger.info("Autonomous Paper Trader loop initialized and running.")
+    except Exception as e:
+        logger.error(f"Failed to start autonomous trader: {e}")
+
     yield
+
+    try:
+        from services.autonomous_runner import autonomous_trader
+        autonomous_trader.stop()
+    except Exception:
+        pass
     logger.info("Shutting down KRIPTO AGENT API...")
 
 
