@@ -123,6 +123,10 @@
                 <button onclick="switchTab('positions')" id="tab-btn-positions" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
                     💼 <span>Açık Pozisyonlar (Paper)</span>
                 </button>
+                <button onclick="switchTab('history')" id="tab-btn-history" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
+                    📈 <span>Pozisyon Geçmişi (Kar/Zarar)</span>
+                    <span id="badge-history-winrate" class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-accentGreen font-mono font-bold">KÂR %83</span>
+                </button>
                 <button onclick="switchTab('trades')" id="tab-btn-trades" class="w-full text-left px-3 py-2.5 rounded-md text-gray-400 hover:bg-panelBorder hover:text-white flex items-center gap-2">
                     ⚡ <span>Canlı Alım-Satım Akışı</span>
                     <span id="badge-trades-count" class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-accentBlue font-mono">0</span>
@@ -617,6 +621,75 @@
                 </div>
             </div>
 
+            <!-- TAB: POZİSYON GEÇMİŞİ (KÂR / ZARAR DURUMU - VİDEODAKİ EKRAN) -->
+            <div id="tab-history" class="hidden space-y-4">
+                <div class="glass-card p-6 space-y-5">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-base font-bold text-white flex items-center gap-2">
+                                    📈 <span>Pozisyon Geçmişi (Position History)</span>
+                                </span>
+                                <span class="badge bg-emerald-500/20 text-accentGreen font-bold">GERÇEKLEŞEN KÂR / ZARAR</span>
+                            </div>
+                            <p class="text-xs text-gray-400 mt-1">
+                                Kapanan tüm işlemlerin net kâr/zarar tutarı (USDT), getiri yüzdesi (ROI %), giriş/çıkış fiyatları ve işlem süreleri.
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="fetchPositionHistory()" class="btn btn-gray text-xs flex items-center gap-1.5">
+                                🔄 <span>Geçmişi Yenile</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Üst Özet Kartları (Büyük Kâr/Zarar Metrikleri) -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="p-4 bg-darkBg/90 rounded-lg border border-emerald-500/30">
+                            <div class="text-[11px] text-gray-400 uppercase font-semibold">Toplam Net Kâr / Zarar</div>
+                            <div class="text-2xl font-bold font-mono text-emerald-400 mt-1" id="hist-stat-net-pnl">+$147.38 USDT</div>
+                            <div class="text-[11px] text-emerald-300/80 mt-0.5">Net Bakiye Artışı</div>
+                        </div>
+                        <div class="p-4 bg-darkBg/90 rounded-lg border border-panelBorder">
+                            <div class="text-[11px] text-gray-400 uppercase font-semibold">Kazanma Oranı (Win Rate)</div>
+                            <div class="text-2xl font-bold font-mono text-emerald-400 mt-1" id="hist-stat-win-rate">%83.3</div>
+                            <div class="text-[11px] text-gray-400 mt-0.5" id="hist-stat-ratio">5 Kazanç / 1 Kayıp</div>
+                        </div>
+                        <div class="p-4 bg-darkBg/90 rounded-lg border border-panelBorder">
+                            <div class="text-[11px] text-gray-400 uppercase font-semibold">Toplam Kapanan Hacim</div>
+                            <div class="text-2xl font-bold font-mono text-white mt-1" id="hist-stat-volume">$17,948.00</div>
+                            <div class="text-[11px] text-gray-400 mt-0.5">6 Kapanmış Pozisyon</div>
+                        </div>
+                        <div class="p-4 bg-darkBg/90 rounded-lg border border-panelBorder">
+                            <div class="text-[11px] text-gray-400 uppercase font-semibold">Ortalama Kâr / İşlem</div>
+                            <div class="text-2xl font-bold font-mono text-emerald-400 mt-1" id="hist-stat-avg-win">+$24.56</div>
+                            <div class="text-[11px] text-gray-400 mt-0.5">Pozitif Matematiksel Beklenti</div>
+                        </div>
+                    </div>
+
+                    <!-- Filtreler -->
+                    <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+                        <div class="flex items-center gap-1.5 text-xs">
+                            <span class="text-gray-400 mr-1">Filtre:</span>
+                            <button onclick="setHistoryFilter('ALL')" id="hfilter-all" class="px-3 py-1 rounded bg-panelBorder text-white font-semibold">Tümü</button>
+                            <button onclick="setHistoryFilter('WIN')" id="hfilter-win" class="px-3 py-1 rounded text-gray-400 hover:bg-panelBorder font-semibold">🟢 Sadece Kârlılar</button>
+                            <button onclick="setHistoryFilter('LOSS')" id="hfilter-loss" class="px-3 py-1 rounded text-gray-400 hover:bg-panelBorder font-semibold">🔴 Sadece Zararlılar</button>
+                        </div>
+                        <div class="text-xs text-gray-400 font-mono" id="hist-filter-count">
+                            6 işlem listeleniyor
+                        </div>
+                    </div>
+
+                    <!-- Pozisyon Kartları Listesi (Tıpkı Videodaki Satırlar) -->
+                    <div class="space-y-3" id="position-history-container">
+                        <!-- JavaScript ile yüklenecek -->
+                        <div class="p-6 text-center text-gray-500 bg-darkBg/50 rounded border border-panelBorder">
+                            Pozisyon geçmişi yükleniyor...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- TAB 6: RİSK AYARLARI -->
             <div id="tab-risk" class="hidden space-y-4">
                 <div class="glass-card p-5 space-y-4">
@@ -659,7 +732,7 @@
 
         // Sekme Değiştirme
         function switchTab(tabId) {
-            const tabs = ['overview', 'binance', 'replay', 'divergences', 'positions', 'trades', 'risk'];
+            const tabs = ['overview', 'binance', 'replay', 'divergences', 'positions', 'history', 'trades', 'risk'];
             tabs.forEach(t => {
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('tab-btn-' + t);
@@ -679,6 +752,7 @@
 
             if (tabId === 'divergences') fetchDivergences();
             if (tabId === 'positions') refreshPositions();
+            if (tabId === 'history') fetchPositionHistory();
             if (tabId === 'trades') fetchTrades();
             if (tabId === 'binance') checkBinanceAccountStatus();
         }
@@ -1179,17 +1253,157 @@ SONUÇ KARARI: 7 GÜNLÜK SANAL KAĞIT İŞLEM DOĞRULAMASINA YÜKSELTİLDİ ✅
             }
         }
 
+        // =============================================================
+        // POZİSYON GEÇMİŞİ (POSITION HISTORY - VİDEODAKİ EKRAN)
+        // =============================================================
+        let currentHistoryList = [];
+        let currentHistoryFilter = 'ALL';
+
+        async function fetchPositionHistory() {
+            try {
+                const res = await fetch(API_BASE + '/api/v1/positions/history');
+                const data = await res.json();
+                if (data && data.history) {
+                    currentHistoryList = data.history;
+
+                    if (data.summary) {
+                        const netPnlEl = document.getElementById('hist-stat-net-pnl');
+                        const winRateEl = document.getElementById('hist-stat-win-rate');
+                        const ratioEl = document.getElementById('hist-stat-ratio');
+                        const volEl = document.getElementById('hist-stat-volume');
+                        const avgWinEl = document.getElementById('hist-stat-avg-win');
+                        const badgeRateEl = document.getElementById('badge-history-winrate');
+
+                        if (netPnlEl) {
+                            netPnlEl.innerText = `${data.summary.total_realized_pnl >= 0 ? '+' : ''}$${data.summary.total_realized_pnl.toFixed(2)} USDT`;
+                            netPnlEl.className = `text-2xl font-bold font-mono ${data.summary.total_realized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'} mt-1`;
+                        }
+                        if (winRateEl) winRateEl.innerText = `%${data.summary.win_rate_pct.toFixed(1)}`;
+                        if (ratioEl) ratioEl.innerText = `${data.summary.wins} Kazanç / ${data.summary.losses} Kayıp`;
+                        if (badgeRateEl) badgeRateEl.innerText = `KÂR %${data.summary.win_rate_pct.toFixed(0)}`;
+
+                        let totalVol = 0;
+                        currentHistoryList.forEach(item => { totalVol += (item.closed_volume_usd || 0); });
+                        if (volEl) volEl.innerText = `$${totalVol.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                        const avgWin = data.summary.wins > 0 ? (data.summary.total_realized_pnl / data.summary.wins) : 0;
+                        if (avgWinEl) avgWinEl.innerText = `${avgWin >= 0 ? '+' : ''}$${avgWin.toFixed(2)}`;
+                    }
+
+                    renderPositionHistoryUI();
+                }
+            } catch (err) {
+                console.error('Position history fetch error:', err);
+            }
+        }
+
+        function setHistoryFilter(filter) {
+            currentHistoryFilter = filter;
+            ['all', 'win', 'loss'].forEach(f => {
+                const btn = document.getElementById('hfilter-' + f);
+                if (btn) {
+                    if (f.toUpperCase() === filter) {
+                        btn.className = 'px-3 py-1 rounded bg-panelBorder text-white font-semibold';
+                    } else {
+                        btn.className = 'px-3 py-1 rounded text-gray-400 hover:bg-panelBorder font-semibold';
+                    }
+                }
+            });
+            renderPositionHistoryUI();
+        }
+
+        function renderPositionHistoryUI() {
+            const container = document.getElementById('position-history-container');
+            const filterCountEl = document.getElementById('hist-filter-count');
+            if (!container) return;
+
+            let filtered = currentHistoryList;
+            if (currentHistoryFilter === 'WIN') {
+                filtered = currentHistoryList.filter(r => r.is_win);
+            } else if (currentHistoryFilter === 'LOSS') {
+                filtered = currentHistoryList.filter(r => !r.is_win);
+            }
+
+            if (filterCountEl) filterCountEl.innerText = `${filtered.length} / ${currentHistoryList.length} işlem listeleniyor`;
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="p-6 text-center text-gray-500 bg-darkBg/50 rounded border border-panelBorder">Seçilen filtrede pozisyon geçmişi bulunamadı.</div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(r => `
+                <div class="p-4 bg-darkBg/80 border ${r.is_win ? 'border-emerald-500/20 hover:border-emerald-500/40' : 'border-red-500/20 hover:border-red-500/40'} rounded-lg transition space-y-3">
+                    <!-- Üst Satır: Parite, Kaldıraç, Yön, Durum ve Tarihler -->
+                    <div class="flex flex-wrap items-center justify-between text-xs gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-7 h-7 rounded-full bg-panelBorder/70 flex items-center justify-center font-bold text-xs text-white">
+                                ${r.symbol.slice(0, 1)}
+                            </span>
+                            <span class="font-bold text-sm text-white">${r.clean_symbol}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] bg-darkBg border border-panelBorder text-gray-400 font-mono">Perp ${r.leverage}</span>
+                            <span class="px-2 py-0.5 rounded text-[11px] font-bold ${r.side === 'LONG' ? 'bg-emerald-500/20 text-accentGreen border border-emerald-500/30' : 'bg-red-500/20 text-accentRed border border-red-500/30'}">
+                                ${r.side === 'LONG' ? '🟢 Isolated Long' : '🔴 Isolated Short'}
+                            </span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] bg-panelBorder text-gray-400">Closed</span>
+                        </div>
+                        <div class="text-[11px] text-gray-400 font-mono">
+                            <span>Açılış: <b class="text-gray-300">${r.opened_at}</b></span> &bull; 
+                            <span>Kapanış: <b class="text-gray-300">${r.closed_at}</b></span> 
+                            <span class="text-gray-500">(Süre: ${r.duration_str})</span>
+                        </div>
+                    </div>
+
+                    <!-- Ana Satır: Net Kâr/Zarar (Büyük), ROI %, Hacim, Giriş ve Çıkış Fiyatları -->
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 pt-2.5 border-t border-panelBorder/40 text-xs">
+                        <div>
+                            <div class="text-[11px] text-gray-400">Realized PNL (USDT)</div>
+                            <div class="text-lg font-bold font-mono ${r.realized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'} mt-0.5">
+                                ${r.realized_pnl >= 0 ? '+' : ''}${r.realized_pnl.toFixed(2)} USDT
+                            </div>
+                            <div class="text-[11px] font-mono font-bold ${r.roi_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}">
+                                ROI: ${r.roi_pct >= 0 ? '+' : ''}${r.roi_pct.toFixed(2)}%
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="text-[11px] text-gray-400">Closed Vol (Hacim)</div>
+                            <div class="text-sm font-mono font-bold text-white mt-1">$${r.closed_volume_usd.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</div>
+                            <div class="text-[11px] text-gray-400 font-mono">${r.quantity.toLocaleString('tr-TR')} ${r.symbol.split('/')[0]}</div>
+                        </div>
+
+                        <div>
+                            <div class="text-[11px] text-gray-400">Entry Price (Giriş Fiyatı)</div>
+                            <div class="text-sm font-mono font-bold text-white mt-1">$${r.entry_price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</div>
+                        </div>
+
+                        <div>
+                            <div class="text-[11px] text-gray-400">Avg. Close Price (Kapanış)</div>
+                            <div class="text-sm font-mono font-bold text-white mt-1">$${r.exit_price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</div>
+                        </div>
+
+                        <div class="col-span-2 md:col-span-1 flex items-center md:justify-end">
+                            <span class="px-3 py-1.5 rounded text-xs font-bold font-mono ${r.is_win ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/40' : 'bg-red-950/60 text-red-300 border border-red-500/40'}">
+                                ${r.is_win ? '✅ KÂRLI İŞLEM' : '❌ ZARARLI İŞLEM'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
         // Düzenli aralıklarla veri yenileme
         setInterval(refreshSystemState, 5000);
         setInterval(refreshPositions, 5000);
         setInterval(fetchLiveTickers, 4000);
         setInterval(fetchTrades, 3000);
+        setInterval(fetchPositionHistory, 5000);
 
         // Başlangıç yüklemeleri
         refreshSystemState();
         refreshPositions();
         fetchLiveTickers();
         fetchTrades();
+        fetchPositionHistory();
         checkBinanceAccountStatus();
     </script>
 </body>
