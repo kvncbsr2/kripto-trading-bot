@@ -81,6 +81,20 @@ class TelegramNotificationService:
         )
         await self.send_message(msg)
 
+    async def notify_bot_started(self, capital: float = 5000.0) -> bool:
+        msg = (
+            f"▶️ <b>KRIPTO AGENT BAŞLATILDI</b>\n"
+            f"Mod: <b>Paper Trading (0 Risk)</b>\n"
+            f"Başlangıç Sermayesi: <b>${capital:,.2f}</b>\n"
+            f"Strateji: <b>R10 RSI Uyumsuzluğu</b>\n"
+            f"Piyasa: <b>Binance Spot Canlı</b>"
+        )
+        return await self.send_message(msg)
+
+    async def notify_bot_stopped(self) -> bool:
+        msg = "⏹️ <b>KRIPTO AGENT DURDURULDU</b>\nPiyasa taraması duraklatıldı."
+        return await self.send_message(msg)
+
     def handle_command(self, cmd: str, system_state: Dict[str, Any]) -> str:
         cmd = cmd.strip().lower()
         if cmd == "/status":
@@ -101,3 +115,6 @@ class TelegramNotificationService:
                 [f"{p.get('symbol')} {p.get('side')} Qty: {p.get('quantity')}" for p in positions]
             )
         return f"Unknown command: {cmd}"
+
+
+telegram_service = TelegramNotificationService()

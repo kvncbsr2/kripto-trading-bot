@@ -266,11 +266,32 @@ async def test_v6_api_endpoints(client: AsyncClient):
     assert divs[0]["divergence_type"] == "REGULAR_BULLISH"
 
     # 4. Run Strategy Discovery Tournament
-    disc_res = await client.post("/api/v1/strategy-discovery/run")
-    assert disc_res.status_code == 200
-    disc_data = disc_res.json()
-    assert disc_data["candidates_count"] == 10
-    assert "winner" in disc_data
+    from unittest.mock import AsyncMock, patch
+    from shared.schemas import Candle
+    from shared.enums import Timeframe
+    base_ts = datetime.now(timezone.utc)
+    mock_candles = [
+        Candle(
+            symbol="BTC/USDT",
+            timeframe=Timeframe.D1,
+            timestamp=base_ts + timedelta(days=i),
+            open=50000.0 + (i % 20) * 100.0,
+            high=50100.0 + (i % 20) * 100.0,
+            low=49900.0 + (i % 20) * 100.0,
+            close=50050.0 + (i % 20) * 100.0,
+            volume=1000.0,
+        )
+        for i in range(120)
+    ]
+    with patch(
+        "apps.api.app.api.routers.discovery.market_data_service.get_historical_klines",
+        new=AsyncMock(return_value=mock_candles),
+    ):
+        disc_res = await client.post("/api/v1/strategy-discovery/run")
+        assert disc_res.status_code == 200
+        disc_data = disc_res.json()
+        assert disc_data["candidates_count"] == 10
+        assert "winner" in disc_data
 
     # 5. Validation Execution Deviation
     val_res = await client.get("/api/v1/validation/comparison")

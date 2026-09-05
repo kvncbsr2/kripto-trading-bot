@@ -31,13 +31,19 @@ class Settings(BaseSettings):
     EXECUTION_MODE: str = "paper"        # Strict Virtual Execution
     SECURITY_LEVEL: int = 1             # Level 1: Market Data + Paper Execution
 
-    # STRICT LIVE TRADING GUARDRAILS
+    # STRICT LIVE TRADING GUARDRAILS (Section 25 & 26)
     PAPER_TRADING: bool = True
-    LIVE_TRADING: bool = False  # Hard guardrail
+    LIVE_TRADING: bool = False  # Hard guardrail (default False)
+    LIVE_TRADING_ARMED: bool = False  # Step 2 of two-step activation
+
+    # API Security & Authentication (Section 27)
+    API_KEY_AUTH_ENABLED: bool = False  # Enable in production
+    API_AUTH_SECRET: str = "kripto-agent-secret-token"
+    API_ADMIN_KEY: str = "kripto-agent-admin-key"
 
     # R10 RSI Divergence Configuration
     R10_ENABLED: bool = True
-    R10_TIMEFRAME: str = "1d"
+    R10_TIMEFRAME: str = "15m"
     R10_RSI_LENGTH: int = 14
     R10_PIVOT_LEFT: int = 5
     R10_PIVOT_RIGHT: int = 5
@@ -92,17 +98,21 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: Optional[str] = None
     TELEGRAM_NOTIFICATIONS_ENABLED: bool = False
 
+    # Bitcoin Trend Shield (Regime Filter)
+    BTC_REGIME_FILTER_ENABLED: bool = True
+    BTC_DUMP_THRESHOLD_PCT: float = -1.5  # If BTC 15m/1h returns fall below -1.5%, suppress altcoin longs
+
     # API Server
-    API_HOST: str = "0.0.0.0"
+    API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
 
 
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    # Enforce strict safety assertion: LIVE_TRADING MUST NOT be active in V2
-    if settings.LIVE_TRADING:
+    # Enforce two-step live trading activation safety guardrail (AUDIT-13)
+    if settings.LIVE_TRADING and not settings.LIVE_TRADING_ARMED:
         raise RuntimeError(
-            "CRITICAL SECURITY VIOLATION: LIVE TRADING IS DISABLED DURING VALIDATION."
+            "CRITICAL SECURITY VIOLATION: LIVE_TRADING is True but LIVE_TRADING_ARMED is False (Two-step activation required)."
         )
     return settings

@@ -20,16 +20,20 @@ settings = get_settings()
 class ConnectionState(str, Enum):
     DISCONNECTED = "DISCONNECTED"
     CONNECTING = "CONNECTING"
-    HEALTHY = "HEALTHY"
+    CONNECTED = "CONNECTED"
+    HEALTHY = "CONNECTED"  # Backward compatibility alias
+    DEGRADED = "DEGRADED"
     RECONNECTING = "RECONNECTING"
     FAILED = "FAILED"
+    STOPPING = "STOPPING"
+    STOPPED = "STOPPED"
 
 
 class BinanceConnector:
     """
     Dedicated Binance Connector supporting Real-Time Multiplexed WebSockets
     (kline, bookTicker, miniTicker) and REST recovery.
-    Includes state machine (DISCONNECTED -> RECONNECT -> RESUBSCRIBE -> RESYNC -> HEALTHY).
+    Includes state machine (DISCONNECTED -> CONNECTING -> CONNECTED -> RECONNECTING -> STOPPED).
     """
 
     WS_STREAM_URL = "wss://stream.binance.com:9443/stream?streams="
@@ -46,6 +50,10 @@ class BinanceConnector:
         self._ws: Optional[Any] = None
         self._reconnect_count = 0
         self._last_heartbeat: Optional[datetime] = None
+        self.connection_timestamp: Optional[datetime] = None
+        self.last_message_timestamp: Optional[datetime] = None
+        self.last_event_timestamp: Optional[datetime] = None
+        self.subscriptions: List[str] = []
 
         # Callbacks
         self.candle_callbacks: List[Callable[[Candle], None]] = []
@@ -58,6 +66,7 @@ class BinanceConnector:
         self.rest_client = ccxt.binance(
             {
                 "enableRateLimit": True,
+                "timeout": 4000,
                 "options": {"defaultType": "spot"},
             }
         )
@@ -77,26 +86,42 @@ class BinanceConnector:
             "timeframe": self.timeframe.value,
             "reconnect_count": self._reconnect_count,
             "last_heartbeat": self._last_heartbeat.isoformat() if self._last_heartbeat else None,
+            "connection_timestamp": self.connection_timestamp.isoformat() if self.connection_timestamp else None,
+            "last_message_timestamp": self.last_message_timestamp.isoformat() if self.last_message_timestamp else None,
+            "last_event_timestamp": self.last_event_timestamp.isoformat() if self.last_event_timestamp else None,
+            "subscriptions": self.subscriptions,
             "live_trading_locked": True,
         }
 
     async def get_historical_candles(
-        self, symbol: str, timeframe: str = "15m", limit: int = 100
+        self,
+        symbol: str,
+        timeframe: str = "15m",
+        limit: int = 100,
+        since: Optional[int] = None,
+        end_time: Optional[int] = None,
     ) -> List[Candle]:
-        """REST recovery / initialization of historical candles."""
+        """REST recovery / initialization of historical candles respecting since and end_time."""
         try:
-            raw_klines = await self.rest_client.fetch_ohlcv(
-                symbol, timeframe=timeframe, limit=limit
+            kwargs = {}
+            if since is not None:
+                kwargs["since"] = since
+            raw_klines = await asyncio.wait_for(
+                self.rest_client.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit, **kwargs),
+                timeout=4.0,
             )
             candles = []
             for k in raw_klines:
+                k_ts_ms = k[0]
+                if end_time is not None and k_ts_ms > end_time:
+                    continue
                 candles.append(
                     Candle(
                         symbol=symbol,
                         timeframe=Timeframe(timeframe)
                         if timeframe in [t.value for t in Timeframe]
                         else Timeframe.M15,
-                        timestamp=datetime.fromtimestamp(k[0] / 1000.0, tz=timezone.utc),
+                        timestamp=datetime.fromtimestamp(k_ts_ms / 1000.0, tz=timezone.utc),
                         open=float(k[1]),
                         high=float(k[2]),
                         low=float(k[3]),
@@ -110,7 +135,13 @@ class BinanceConnector:
             return []
 
     async def start(self):
-        """Starts real-time multiplexed WebSocket stream loop."""
+        """Starts real-time multiplexed WebSocket stream loop with jitter and exponential backoff."""
+        if self._running:
+            logger.info("Binance connector already running.")
+            return
+
+        import random
+
         self._running = True
         reconnect_delay = 2.0
         max_reconnect_delay = 60.0
@@ -122,6 +153,7 @@ class BinanceConnector:
             streams.append(f"{formatted_sym}@kline_{self.timeframe.value}")
             streams.append(f"{formatted_sym}@bookTicker")
 
+        self.subscriptions = streams
         stream_query = "/".join(streams)
         full_ws_url = f"{self.WS_STREAM_URL}{stream_query}"
 
@@ -134,34 +166,48 @@ class BinanceConnector:
 
                 async with websockets.connect(full_ws_url, ping_interval=20, ping_timeout=10) as ws:
                     self._ws = ws
-                    self.state = ConnectionState.HEALTHY
-                    self._last_heartbeat = datetime.now(timezone.utc)
+                    self.state = ConnectionState.CONNECTED
+                    now_utc = datetime.now(timezone.utc)
+                    self.connection_timestamp = now_utc
+                    self._last_heartbeat = now_utc
+                    self.last_message_timestamp = now_utc
                     reconnect_delay = 2.0
-                    logger.info("Binance WebSocket HEALTHY: Real-time streams active.")
+                    logger.info("Binance WebSocket CONNECTED: Real-time streams active.")
 
                     while self._running:
                         msg = await ws.recv()
-                        self._last_heartbeat = datetime.now(timezone.utc)
+                        now_msg = datetime.now(timezone.utc)
+                        self._last_heartbeat = now_msg
+                        self.last_message_timestamp = now_msg
                         await self._process_ws_message(msg)
 
             except (websockets.ConnectionClosed, Exception) as e:
                 if not self._running:
-                    self.state = ConnectionState.DISCONNECTED
+                    self.state = ConnectionState.STOPPED
                     break
                 self._reconnect_count += 1
                 self.state = ConnectionState.RECONNECTING
+                jitter = random.uniform(0.8, 1.2)
+                wait_time = min(reconnect_delay * jitter, max_reconnect_delay)
                 logger.warning(
-                    f"Binance WS disconnected ({e}). Reconnecting in {reconnect_delay:.1f}s (Attempt #{self._reconnect_count})..."
+                    f"Binance WS disconnected ({e}). Reconnecting in {wait_time:.1f}s (Attempt #{self._reconnect_count})..."
                 )
-                await asyncio.sleep(reconnect_delay)
+                await asyncio.sleep(wait_time)
                 reconnect_delay = min(reconnect_delay * 1.5, max_reconnect_delay)
 
     async def stop(self):
         self._running = False
+        self.state = ConnectionState.STOPPING
         if self._ws:
-            await self._ws.close()
-        await self.rest_client.close()
-        self.state = ConnectionState.DISCONNECTED
+            try:
+                await self._ws.close()
+            except Exception as e:
+                logger.debug(f"Error closing WebSocket during shutdown: {e}")
+        try:
+            await self.rest_client.close()
+        except Exception as e:
+            logger.debug(f"Error closing REST client during shutdown: {e}")
+        self.state = ConnectionState.STOPPED
         logger.info("Binance connector stopped.")
 
     async def _process_ws_message(self, raw_msg: Any):

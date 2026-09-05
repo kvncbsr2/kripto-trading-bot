@@ -10,7 +10,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
-import numpy as np
+import requests
 
 from services.feature_engine.features import FeatureEngine
 from services.paper_broker.broker import PaperBroker
@@ -18,84 +18,96 @@ from services.performance_engine.journal import ExperimentJournal
 from services.regime_engine.detector import RegimeDetector
 from services.risk_engine.risk_engine import RiskEngine
 from services.strategy_engine.strategy_manager import StrategyManager
+from shared.config import get_settings
 from shared.enums import Timeframe
 from shared.logging import get_logger
 from shared.schemas import Candle
 
 logger = get_logger("7day-experiment", service="experiment")
+settings = get_settings()
 
 
-def generate_synthetic_candles(
-    start_price: float = 64000.0,
-    n_days: int = 7,
-    candles_per_day: int = 96,  # 15m candles
+def fetch_real_binance_candles(
+    symbol: str = "BTC/USDT",
+    timeframe: str = "15m",
+    limit: int = 1000,
 ) -> List[Candle]:
     """
-    Generates realistic 15m crypto market candles across 7 days
-    incorporating trend, range, and RSI divergence conditions.
+    ZERO SYNTHETIC DATA MANDATE (P0-2 & P0-3):
+    Fetches real closed 15m historical candles directly from Binance Public REST API.
+    Fails closed if the endpoint is unreachable or returns insufficient closed candles.
     """
-    total_candles = n_days * candles_per_day
-    base_time = datetime.now(timezone.utc) - timedelta(days=n_days)
+    binance_symbol = symbol.replace("/", "").upper()
+    url = f"https://api.binance.com/api/v3/klines?symbol={binance_symbol}&interval={timeframe}&limit={limit}"
+    logger.info(f"Connecting to authoritative Binance REST endpoint: {url}")
+    try:
+        resp = requests.get(url, timeout=20)
+        resp.raise_for_status()
+        raw_klines = resp.json()
+    except Exception as exc:
+        logger.critical(f"FATAL: Binance REST API unreachable for real candles: {exc}")
+        raise RuntimeError(
+            f"DATA_UNAVAILABLE: Failed to retrieve authoritative candles from Binance ({exc}). "
+            f"Zero synthetic fallback permitted per P0-2 policy."
+        ) from exc
 
+    if not isinstance(raw_klines, list) or len(raw_klines) < 672:
+        raise RuntimeError(
+            f"DATA_UNAVAILABLE: Received {len(raw_klines) if isinstance(raw_klines, list) else 0} candles, "
+            f"minimum 672 required for 7-day experiment. Zero synthetic fallback permitted."
+        )
+
+    # Exclude currently forming (unclosed) candle at the tail if present
+    closed_klines = raw_klines[:-1] if len(raw_klines) > 672 else raw_klines
     candles: List[Candle] = []
-    current_close = start_price
-
-    rng = np.random.default_rng(seed=123)
-
-    for i in range(total_candles):
-        ts = base_time + timedelta(minutes=15 * i)
-
-        # Regimes: Days 1-2 Bull Trend, Days 3-4 Sideways, Days 5-7 Swing Divergence
-        day = (i // candles_per_day) + 1
-        if day in [1, 2]:
-            drift = 0.0004
-            vol = 0.003
-        elif day in [3, 4]:
-            drift = -0.0001
-            vol = 0.0025
-        else:
-            drift = 0.0002
-            vol = 0.004
-
-        pct_change = rng.normal(drift, vol)
-        open_price = current_close
-        close_price = open_price * (1.0 + pct_change)
-        high_price = max(open_price, close_price) * (1.0 + abs(rng.normal(0, 0.0015)))
-        low_price = min(open_price, close_price) * (1.0 - abs(rng.normal(0, 0.0015)))
-        volume = float(rng.uniform(15.0, 120.0))
-
-        current_close = close_price
-
+    for item in closed_klines:
+        open_time = int(item[0])
+        ts = datetime.fromtimestamp(open_time / 1000.0, tz=timezone.utc)
         candles.append(
             Candle(
-                symbol="BTC/USDT",
+                symbol=symbol,
                 timeframe=Timeframe.M15,
                 timestamp=ts,
-                open=round(open_price, 2),
-                high=round(high_price, 2),
-                low=round(low_price, 2),
-                close=round(close_price, 2),
-                volume=round(volume, 4),
+                open=float(item[1]),
+                high=float(item[2]),
+                low=float(item[3]),
+                close=float(item[4]),
+                volume=float(item[5]),
             )
         )
 
+    logger.info(
+        f"Authoritative Binance market data acquired: {len(candles)} closed 15m candles. Zero synthetic data."
+    )
     return candles
 
 
 def run_7day_validation_experiment():
     print("================================================================================")
     print("🚀 STARTING KRIPTO AGENT — 7-DAY $5,000 PAPER TRADING VALIDATION EXPERIMENT")
+    print("   [REAL BINANCE SPOT MARKET DATA — ZERO SYNTHETIC PRICE INJECTION]")
     print("================================================================================")
 
-    initial_capital = 5000.0
+    initial_capital = settings.INITIAL_CAPITAL
     broker = PaperBroker(
-        initial_balance=initial_capital, maker_fee=0.001, taker_fee=0.001, slippage_bps=5.0
+        initial_balance=initial_capital,
+        maker_fee=settings.MAKER_FEE,
+        taker_fee=settings.TAKER_FEE,
+        slippage_bps=settings.SLIPPAGE_BPS,
     )
     strategy_mgr = StrategyManager()
     regime_detector = RegimeDetector()
-    risk_engine = RiskEngine()
+    risk_engine = RiskEngine(
+        risk_per_trade=settings.RISK_PER_TRADE,
+        daily_max_loss_usd=settings.DAILY_MAX_LOSS,
+        max_open_positions=settings.MAX_OPEN_POSITIONS,
+        max_trades_per_day=settings.MAX_TRADES_PER_DAY,
+    )
 
-    candles = generate_synthetic_candles(start_price=64000.0, n_days=7, candles_per_day=96)
+    # 7 full days of 15m candles = 7 * 96 = 672 candles
+    raw_candles = fetch_real_binance_candles(symbol="BTC/USDT", timeframe="15m", limit=1000)
+    # Ensure at least 672 candles available
+    candles = raw_candles[-672:]
     candles_per_day = 96
 
     daily_journals = []

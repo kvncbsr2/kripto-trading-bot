@@ -147,21 +147,63 @@ class StrategyDiscoveryEngine:
         )
         self.trials_count += len(self.candidates)
 
-        for cand in self.candidates:
-            # Generate deterministic variant signals using candidate rules
-            np.random.seed(42 + hash(cand.variant) % 1000)
-            entries = pd.Series([False] * n_bars)
-            exits = pd.Series([False] * n_bars)
+        # Precompute indicators on real close series
+        delta = close_series.diff()
+        gain = delta.clip(lower=0)
+        loss = -delta.clip(upper=0)
+        avg_gain = gain.rolling(window=14, min_periods=14).mean()
+        avg_loss = loss.rolling(window=14, min_periods=14).mean()
+        rs = avg_gain / avg_loss.replace(0, np.nan)
+        rsi = (100.0 - (100.0 / (1.0 + rs))).fillna(50.0)
 
-            # Variant-based trade frequency:
-            step = (
-                14
-                if "V1" in cand.variant
-                else (18 if "V2" in cand.variant or "V5" in cand.variant else 22)
-            )
-            for i in range(25, n_bars - 8, step):
-                entries.iloc[i] = True
-                exits.iloc[i + 5] = True
+        ema50 = close_series.ewm(span=50, adjust=False).mean()
+        ema200 = close_series.ewm(span=200, adjust=False).mean()
+        rolling_std = close_series.rolling(window=20, min_periods=5).std().fillna(0.0)
+
+        for cand in self.candidates:
+            rules = cand.dsl_definition.get("rules", {})
+            entries = pd.Series([False] * n_bars, index=close_series.index)
+            exits = pd.Series([False] * n_bars, index=close_series.index)
+
+            # 1. Base Causal RSI Divergence / Reversion Condition:
+            # RSI was oversold (< 35) within last 5 bars and turns upward
+            rsi_oversold = (rsi.shift(1) < 35) & (rsi > rsi.shift(1))
+            base_condition = rsi_oversold
+
+            # 2. Apply DSL Variant Rules
+            if rules.get("filter_ema200"):
+                base_condition = base_condition & (close_series > ema200)
+
+            if rules.get("volume_confirmation") or rules.get("market_structure"):
+                # Bullish candle confirmation (positive return over prior bar)
+                base_condition = base_condition & (close_series > close_series.shift(1))
+
+            if rules.get("adx_filter"):
+                # Strong directional momentum: divergence from EMA50
+                base_condition = base_condition & (close_series > ema50)
+
+            if rules.get("regime_filter"):
+                # Multi-regime alignment: EMA50 > EMA200 (bull regime)
+                base_condition = base_condition & (ema50 > ema200)
+
+            if rules.get("atr_regime"):
+                # Low/moderate volatility filter
+                base_condition = base_condition & (rolling_std < rolling_std.rolling(50, min_periods=10).mean() * 1.5)
+
+            # Generate entries and causal trailing/fixed exits
+            in_pos = False
+            bars_held = 0
+            for i in range(20, n_bars):
+                if not in_pos and bool(base_condition.iloc[i]):
+                    entries.iloc[i] = True
+                    in_pos = True
+                    bars_held = 0
+                elif in_pos:
+                    bars_held += 1
+                    # Exit on RSI overbought (> 65) or max hold 12 bars
+                    if bool(rsi.iloc[i] > 65) or bars_held >= 12:
+                        exits.iloc[i] = True
+                        in_pos = False
 
             # 1. In-Sample Backtest
             train_close = close_series.iloc[train_start:train_end]
@@ -169,6 +211,14 @@ class StrategyDiscoveryEngine:
                 close=train_close,
                 entries=entries.iloc[train_start:train_end],
                 exits=exits.iloc[train_start:train_end],
+            )
+
+            # Validation Segment for Regime Stability
+            val_close = close_series.iloc[val_start:val_end]
+            val_res = backtester.run_backtest_from_signals(
+                close=val_close,
+                entries=entries.iloc[val_start:val_end],
+                exits=exits.iloc[val_start:val_end],
             )
 
             # 2. Out-of-Sample Backtest (Unseen by optimizer)
@@ -206,6 +256,22 @@ class StrategyDiscoveryEngine:
             if np.isnan(wf_stability) or np.isinf(wf_stability):
                 wf_stability = 0.5
 
+            # Dynamically calculate profitable regimes from the 3 purged partitions
+            regimes_profitable = sum(
+                1 for pnl in [train_res["total_net_pnl"], val_res["total_net_pnl"], oos_res["total_net_pnl"]]
+                if pnl > 0
+            )
+
+            # 4.1 Parameter Plateau Stability Evaluation
+            _, dyn_plateau_score = OverfittingProtectionEngine.evaluate_parameter_plateau(
+                base_param_value=float(cand.parameters.get("rsi_length", 14)),
+                neighborhood_pfs=[
+                    float(train_res["profit_factor"]),
+                    float(val_res["profit_factor"]),
+                    float(oos_res["profit_factor"]),
+                ],
+            )
+
             report = OverfittingProtectionEngine.calculate_robustness_score(
                 strategy_slug=cand.candidate_id,
                 version=cand.variant,
@@ -215,14 +281,14 @@ class StrategyDiscoveryEngine:
                 oos_max_drawdown_pct=oos_res["max_drawdown"],
                 walk_forward_stability=wf_stability,
                 monte_carlo_drawdown_95th=min(25.0, oos_res["max_drawdown"] * 1.35),
-                plateau_score=75.0,
+                plateau_score=dyn_plateau_score,
                 fee_stress_passed=fee_passed,
                 fee_score=fee_score,
                 slippage_stress_passed=slip_passed,
                 slippage_score=slip_score,
-                coins_tested_count=8,
-                coins_profitable_count=6 if oos_res["total_net_pnl"] > 0 else 2,
-                regimes_profitable_count=3,
+                coins_tested_count=1,
+                coins_profitable_count=1 if oos_res["total_net_pnl"] > 0 else 0,
+                regimes_profitable_count=regimes_profitable,
                 has_lookahead_violation=False,
             )
             cand.robustness_report = report

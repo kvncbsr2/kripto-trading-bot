@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -21,6 +22,11 @@ class QualityCheckResult:
     severity: QualitySeverity
     reason: Optional[str] = None
 
+    @property
+    def valid(self) -> bool:
+        """Compatibility property matching passed."""
+        return self.passed
+
 
 class DataQualityEngine:
     """
@@ -40,9 +46,34 @@ class DataQualityEngine:
         self._last_candle_by_symbol: Dict[str, Candle] = {}
 
     def validate_candle(
-        self, candle: Candle, current_time: Optional[datetime] = None
+        self,
+        candle: Candle,
+        prev_candle: Optional[Candle] = None,
+        current_time: Optional[datetime] = None,
     ) -> QualityCheckResult:
         now = current_time or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+
+        candle_ts = candle.timestamp
+        if candle_ts.tzinfo is None:
+            candle_ts = candle_ts.replace(tzinfo=timezone.utc)
+
+        # 0. Check NaN / Inf / Non-finite values
+        for val_name, val in [
+            ("open", candle.open),
+            ("high", candle.high),
+            ("low", candle.low),
+            ("close", candle.close),
+            ("volume", candle.volume),
+        ]:
+            if not isinstance(val, (int, float)) or not math.isfinite(val):
+                logger.error(f"TRADING_LOCK: Non-finite/NaN value in {val_name} for {candle.symbol}")
+                return QualityCheckResult(
+                    passed=False,
+                    severity=QualitySeverity.LOCK,
+                    reason=f"NaN or Inf detected in {val_name} for {candle.symbol}",
+                )
 
         # 1. OHLC Geometric Validity
         if (
@@ -77,20 +108,24 @@ class DataQualityEngine:
                 )
 
         # 3. Check sequence against previous candle (if exists)
-        prev = self._last_candle_by_symbol.get(candle.symbol)
+        prev = prev_candle or self._last_candle_by_symbol.get(candle.symbol)
         if prev:
+            prev_ts = prev.timestamp
+            if prev_ts.tzinfo is None:
+                prev_ts = prev_ts.replace(tzinfo=timezone.utc)
+
             # Duplicate candle check
-            if candle.timestamp == prev.timestamp:
+            if candle_ts == prev_ts:
                 return QualityCheckResult(
                     passed=False,
                     severity=QualitySeverity.WARNING,
-                    reason=f"Duplicate candle timestamp {candle.timestamp.isoformat()}",
+                    reason=f"Duplicate candle timestamp {candle_ts.isoformat()}",
                 )
 
             # Out-of-order check
-            if candle.timestamp < prev.timestamp:
+            if candle_ts < prev_ts:
                 logger.error(
-                    f"TRADING_LOCK: Out-of-order candle received for {candle.symbol} ({candle.timestamp} < {prev.timestamp})"
+                    f"TRADING_LOCK: Out-of-order candle received for {candle.symbol} ({candle_ts} < {prev_ts})"
                 )
                 return QualityCheckResult(
                     passed=False,
@@ -100,10 +135,20 @@ class DataQualityEngine:
 
         # 4. Stale price check (Live stream only when current_time is now)
         if current_time is None:
-            candle_age = (now - candle.timestamp).total_seconds()
-            if candle_age > self.max_stale_seconds:
+            candle_age = (now - candle_ts).total_seconds()
+            tf_val = getattr(candle.timeframe, "value", str(candle.timeframe))
+            tf_seconds = {
+                "1m": 60,
+                "5m": 300,
+                "15m": 900,
+                "1h": 3600,
+                "4h": 14400,
+                "1d": 86400,
+            }.get(tf_val, 0)
+            stale_threshold = tf_seconds + self.max_stale_seconds
+            if candle_age > stale_threshold:
                 logger.warning(
-                    f"DATA_QUALITY_WARNING: Stale market data for {candle.symbol} ({candle_age:.0f}s old)"
+                    f"DATA_QUALITY_WARNING: Stale market data for {candle.symbol} ({candle_age:.0f}s old > {stale_threshold:.0f}s)"
                 )
                 return QualityCheckResult(
                     passed=False,

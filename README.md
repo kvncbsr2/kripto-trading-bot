@@ -1,114 +1,93 @@
-# ⚡ KRIPTO AGENT — Master V6
+# ⚡ KRIPTO AGENT V6.1 — Reality-Hardened Local Paper Trading Platform
 
-> **Strategy Discovery + R10 RSI Divergence + Automated Backtest + Overfitting Protection + Real-Time Validation**  
-> *Production-Grade Quantitative Crypto Trading Platform & Local Mission Control*
+> **Production-Hardened Quantitative Local Paper Trading Platform**  
+> *Real Binance Market Data + Strictly Causal R10 Engine + Mandatory Risk Guardrails + Zero Fake Data*
 
 ---
 
-## 🎯 Ana Hedef & Felsefe (Master V6)
+## 🎯 Temel İlkeler ve Mimari Güvenceler (V6.1)
 
-**KRIPTO AGENT V6**, yalnızca geçmiş veride "eğri uydurarak (curve-fitting) kârlı görünen" stratejiler aramaz. Asıl amaç:
+1. **Sıfır Sahte Veri Politikası (Zero Fake Data Policy)**:
+   - Tüm uç noktalar (`/market/ticker`, `/market/orderbook`, `/scanner`, `/positions`, `/trades`, `/performance/daily`, vb.) yalnızca gerçek Binance REST/WebSocket verisi ve yetkili Paper Broker durumunu yansıtır.
+   - Veri bulunamadığında veya bağlantı kurulamadığında asla rastgele veya uydurma veri dönülmez; doğrudan `NO_DATA`, 404 veya boş liste döndürülür.
 
-* **Sıfır Lookahead / Geleceğe Bakış Engeli**: Pivotlar ancak sağ taraftaki 5 bar (`right_bars=5`) oluştuktan sonra doğrulanır. Sinyal geçmişe boyanmaz (`pivot_time != signal_time`), sadece gerçek zamanlı kesinleşme anında üretilir.
-* **Katı Aşırı Öğrenme (Overfitting) Koruması**: Arındırılmış (Purged) zaman serisi bölmesi (60% Train, 20% Val, 20% OOS) ve 5 barlık ambargo (Embargo) penceresi.
-* **Otomatik Strateji Keşfi & Turnuvası**: R10 ailesinden 10 farklı varyant (R10-V1 .. R10-V10) otomatik olarak üretilir, In-Sample ve Out-of-Sample verilerde yarıştırılır ve **Robustness Score (0–100)** ile sıralanır.
-* **Stres Testleri**: 2x ve 3x komisyon testi (`FEE_FRAGILE`), 20 bps slippage testi (`SLIPPAGE_FRAGILE`), 5,000 simülasyonlu Monte Carlo çekilişi ve parametre platosu kararlılık analizi.
-* **Promotion Gate (Canlıya Terfi Kapısı)**: Robustness Skoru $\ge 70$, OOS Kâr Faktörü $\ge 1.10$, pozitif expectancy ve 0 lookahead ihlali gerektirir.
-* **Paper Trading & Yürütüm Sapması**: Backtest beklentileri ile canlı simülasyon arasındaki kayma ve kâr sapmasını (`BACKTEST_LIVE_DEVIATION`) anlık takip eder.
+2. **Tek Yetkili Kağıt Yürütüm Motoru (`PaperExecutionEngine`)**:
+   - Çift broker karmaşası giderilmiş, tek yetkili sınıf `services/execution/paper_execution.py` üzerinden tam portföy muhasebesi sağlanmıştır.
+   - Gerçekçi %0.10 taker komisyonu, 5 bps slippage ve dinamik %50 zirve kâr kilitleme (Trailing Profit Lock) uygulanır.
+
+3. **Spot Modu ve Açığa Satış Koruması**:
+   - Binance Spot modunda (`is_spot_mode=True`), `LONG` emirlerine izin verilir.
+   - `SHORT` yönlü tüm sinyaller hem Risk Motoru hem de Yürütüm Motoru seviyesinde `SIGNAL_ONLY` gerekçesiyle otomatik olarak reddedilir, spot hesabı açığa satamaz.
+
+4. **Risk Motoru Baypas Yasağı**:
+   - Hiçbir strateji, otonom motor, dashboard veya API ucu doğrudan emir üretemez.
+   - Tüm akış zorunlu olarak: `Signal -> RiskEngine.evaluate() -> Approved RiskDecision -> PaperExecutionEngine.execute_order()` kuralına bağlıdır. Risk motoru mutlak veto yetkisine sahiptir.
+
+5. **Nedensel R10 Uyumsuzluk & Katı Anti-Lookahead Güvencesi**:
+   - T barındaki pivot noktaları strictly $T + 5$ sağ bar oluştuktan sonra teyit edilir.
+   - Sinyaller geçmişe boyanmaz (`pivot_time != signal_time`), teyit anında üretilir.
 
 ---
 
 ## 🏗️ Mimari Pipeline
 
 ```text
-                  BINANCE REAL-TIME MARKET DATA
-                                │
-                                ▼
-               CAUSAL FEATURE & PIVOT ENGINE
-         (Strict T+5 Delay, Zero Future Knowledge)
-                                │
-                                ▼
-              R10 RSI DIVERGENCE SIGNAL GENERATOR
-     (Regular Bullish / Bearish, Quality & Signal Score)
-                                │
-                                ▼
-             STRATEGY DISCOVERY & TOURNAMENT ENGINE
-         (10 R10 Variants, VectorBT Vectorized Engine)
-                                │
-                                ▼
-                  OVERFITTING PROTECTION ENGINE
-      ┌─────────────────────────┴─────────────────────────┐
-      ▼                                                   ▼
-PURGED TIME-SERIES OOS                            STRESS TESTING
-• 60% In-Sample / 20% OOS                         • Fee Stress (1x, 2x, 3x)
-• 5-bar Boundary Embargo                          • Slippage Stress (5..50 bps)
-• Walk-Forward Stability                          • Monte Carlo (5,000 runs)
-• Parameter Plateau Analysis                      • Cross-Coin & Regime Tests
-      │                                                   │
-      └─────────────────────────┬─────────────────────────┘
-                                ▼
-                     STRATEGY PROMOTION GATE
-                    (Robustness Score >= 70)
-                                │
-                                ▼
-                 REAL-TIME PAPER VALIDATION ENGINE
-              (Execution Efficiency & Deviation Tracking)
+                  BINANCE SPOT REAL-TIME (REST + WS)
+                                 │
+                                 ▼
+                     DATA QUALITY ENGINE GATE
+         (Monotonicity, Anomaly Check, Dynamic Spread Filter)
+                                 │
+                                 ▼
+               CAUSAL STRATEGY ENGINE (R10 DIVERGENCE)
+               (Strict T+5 Delay, Zero Future Knowledge)
+                                 │
+                                 ▼
+                      CENTRAL RISK ENGINE GATE
+      (Spot Long-Only Veto, $25 Max Risk/Trade, $50 Max Daily Loss)
+                                 │
+                                 ▼
+              AUTHORITATIVE PAPER EXECUTION ENGINE
+           (0.10% Fee, 5 bps Slippage, Trailing 50% Peak Lock)
+                                 │
+                                 ▼
+             LOCAL CANONICAL NEXT.JS DASHBOARD & API
 ```
 
 ---
 
-## 🚀 Tek Komutla Yerel Başlatma
+## 🚀 Yerel Başlatma ve Kullanım
 
-Windows ortamında tek tıkla sistemi başlatabilir ve doğrudan Control Center ekranına ulaşabilirsiniz:
-
+### 1. Python Sanal Ortam & Bağımlılıklar
 ```bash
-# Windows Batch:
-start.bat
-
-# veya PowerShell:
-.\start.ps1
-
-# veya Make:
-make dev
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
 ```
 
-Dashboard Linkleri:
-* **Local Control Dashboard**: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
-* **OpenAPI Swagger Belgeleri**: [http://localhost:8000/docs](http://localhost:8000/docs)
+### 2. API ve Otonom Motor Başlatma
+```bash
+python -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000
+```
+
+### 3. Canonical Next.js Dashboard Başlatma
+```bash
+cd apps/dashboard
+npm install
+npm run dev
+```
+
+Dashboard & Servis Linkleri:
+* **Canonical Next.js Dashboard**: [http://localhost:3000](http://localhost:3000)
+* **API Swagger Dokümantasyonu**: [http://localhost:8000/docs](http://localhost:8000/docs)
+* **Sağlık & Hazırlık Kontrolü**: [http://localhost:8000/health](http://localhost:8000/health)
 * **Prometheus Metrikleri**: [http://localhost:8000/metrics](http://localhost:8000/metrics)
 
 ---
 
-## 🎮 V6 Dashboard & API Modülleri
+## 🧪 Test Suite
 
-1. **R10 Divergences Tab**:
-   * Gerçek zamanlı doğrulanmış swing dip ve tepeler, RSI uyumsuzluk oranları, kalite skoru ve kesinleşmiş sinyaller.
-2. **Strategy Discovery & Tournament Tab**:
-   * `RUN STRATEGY TOURNAMENT` butonu ile 10 R10 varyantını yarıştırma, Robustness ve Overfit Skorları, OOS sonuçları ve `Promote to Paper` eylemi.
-3. **Backtest vs Paper Validation**:
-   * Gerçek kağıt işlemler ile teorik model arasındaki yürütüm verimliliği (`ALIGNED` / `DEVIATION_WARNING`).
-
----
-
-## 🧪 Test Durumu
-
-Tüm test paketleri (Unit, Anti-Lookahead, Strategy, Risk, Backtest, Discovery, API) %100 başarıyla geçmiştir:
-
-```text
-============================== 49 passed in 38.76s ==============================
+Tüm birim, güvenlik, risk ve nedensellik testleri:
+```bash
+pytest tests/ -v
 ```
-
-* **Pytest**: **49 / 49 PASS (%100 Başarı)**
-* **Ruff Linter & Formatter**: **0 Hata**
-* **MyPy Tip Denetimi**: **0 Hata (159 kaynak dosya)**
-
----
-
-## 📚 Dokümantasyonlar
-
-* [R10 RSI Divergence Stratejisi](docs/r10-divergence.md)
-* [Strategy Discovery & Turnuva Motoru](docs/strategy-discovery.md)
-* [Geleceğe Bakış Engelleme (Anti-Lookahead)](docs/anti-lookahead.md)
-* [Strateji Terfi Kapısı & Doğrulama](docs/validation.md)
-* [Local Control Center Mimarisi](docs/CONTROL_CENTER.md)
-* [GitHub Kaynak Matrisi](docs/SOURCE_AUDIT.md)

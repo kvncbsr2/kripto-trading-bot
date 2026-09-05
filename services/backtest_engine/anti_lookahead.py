@@ -66,6 +66,26 @@ class AntiLookaheadEngine:
         self.audit_records.append(record)
         return record
 
+    def record_signal_generation(
+        self,
+        signal_id: str,
+        data_available_until: datetime,
+        decision_timestamp: datetime,
+        execution_timestamp: datetime,
+        pivot_timestamp: Optional[datetime] = None,
+        bar_index: int = 0,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> EventAuditRecord:
+        return self.record_decision_event(
+            event_id=signal_id,
+            bar_index=bar_index,
+            data_available_until=data_available_until,
+            decision_timestamp=decision_timestamp,
+            execution_timestamp=execution_timestamp,
+            pivot_timestamp=pivot_timestamp,
+            details=details,
+        )
+
     def run_audit(self) -> AntiLookaheadAuditResult:
         """
         Scans all registered decision events to certify that zero future data leakage occurred.

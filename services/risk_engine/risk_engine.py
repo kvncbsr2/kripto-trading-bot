@@ -4,6 +4,7 @@ from typing import Optional
 from services.risk_engine.circuit_breaker import CircuitBreaker
 from services.risk_engine.position_sizing import calculate_atr_position_size
 from services.risk_engine.stop_loss import validate_stop_and_target
+from shared.enums import SignalDirection
 from shared.logging import get_logger
 from shared.schemas import PortfolioState, RiskDecision, Signal
 
@@ -30,6 +31,8 @@ class RiskEngine:
         target_mode: str = "SOFT",  # SOFT or HARD
         daily_target_min: float = 20.0,
         daily_target_max: float = 100.0,
+        is_spot_mode: bool = True,
+        max_trades_per_day: int = 5,
     ):
         self.risk_per_trade = risk_per_trade
         self.daily_max_loss_usd = daily_max_loss_usd
@@ -38,6 +41,8 @@ class RiskEngine:
         self.target_mode = target_mode
         self.daily_target_min = daily_target_min
         self.daily_target_max = daily_target_max
+        self.is_spot_mode = is_spot_mode
+        self.max_trades_per_day = max_trades_per_day
 
         self.circuit_breaker = CircuitBreaker(
             daily_max_loss_usd=self.daily_max_loss_usd,
@@ -49,10 +54,56 @@ class RiskEngine:
         signal: Signal,
         portfolio: PortfolioState,
         latest_market_time: Optional[datetime] = None,
+        current_time: Optional[datetime] = None,
     ) -> RiskDecision:
-        # 1. Circuit Breaker & Daily Loss Check
+        from datetime import timezone
+
+        system_now = datetime.now(timezone.utc)
+        if current_time is not None:
+            now = current_time
+        elif latest_market_time is not None:
+            lmt = latest_market_time if latest_market_time.tzinfo is not None else latest_market_time.replace(tzinfo=timezone.utc)
+            # Detect historical simulation/replay (> 24h in past) vs live trading (< 24h)
+            if (system_now - lmt).total_seconds() > 86400.0:
+                now = lmt
+            else:
+                now = system_now
+        else:
+            now = system_now
+
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+
+        # 0. Signal Freshness Validation (Section 10)
+        sig_ts = signal.timestamp
+        if sig_ts:
+            if sig_ts.tzinfo is None:
+                sig_ts = sig_ts.replace(tzinfo=timezone.utc)
+            sig_age = (now - sig_ts).total_seconds()
+            ttl_seconds = 900.0  # 15 minutes TTL for 15m timeframe candles
+            if sig_age > ttl_seconds:
+                return RiskDecision(
+                    approved=False,
+                    symbol=signal.symbol,
+                    direction=signal.direction,
+                    reason=f"Signal expired ({sig_age:.0f}s old > {ttl_seconds:.0f}s TTL)",
+                )
+
+        # 0.1 Spot Mode Protection (Requirement 6 & 36)
+        if self.is_spot_mode and signal.direction == SignalDirection.SHORT:
+            logger.info(
+                f"Spot Mode: SHORT signal for {signal.symbol} recorded as SIGNAL_ONLY (execution not supported in Spot)."
+            )
+            return RiskDecision(
+                approved=False,
+                symbol=signal.symbol,
+                direction=signal.direction,
+                reason="Spot Mode: SHORT is NOT_SUPPORTED (SIGNAL_ONLY)",
+            )
+
+        # 1. Circuit Breaker & Daily Loss Check with real UTC time (AUDIT-02)
         tripped, reason, event_type = self.circuit_breaker.check(
-            portfolio, latest_market_time, current_time=latest_market_time
+            portfolio, latest_market_time, current_time=now
         )
         if tripped:
             return RiskDecision(
@@ -131,9 +182,6 @@ class RiskEngine:
                 reason="Calculated position size is zero or below minimum allowable threshold",
             )
 
-        # Track trade count
-        self.circuit_breaker.record_trade()
-
         logger.info(
             f"Risk APPROVED: {signal.symbol} {signal.direction.value} size={size} "
             f"risk=${risk_amount:.2f} (Portfolio Equity: ${portfolio.equity:.2f})",
@@ -150,4 +198,11 @@ class RiskEngine:
             take_profit=signal.take_profit,
             risk_amount=risk_amount,
             reason="All risk parameters satisfied",
+        )
+
+    def record_executed_trade(self):
+        """Called ONLY upon actual order execution and fill (AUDIT-05)."""
+        self.circuit_breaker.record_trade()
+        logger.info(
+            f"Trade recorded in circuit breaker ({self.circuit_breaker.trades_today_count}/{self.circuit_breaker.max_trades_per_day} trades today)."
         )

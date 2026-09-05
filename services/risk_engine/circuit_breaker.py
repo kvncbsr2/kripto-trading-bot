@@ -71,7 +71,13 @@ class CircuitBreaker:
         # 3. Market Data Freshness / Stale Data Check
         if latest_candle_time is not None:
             now = current_time or datetime.now(timezone.utc)
-            diff = (now - latest_candle_time).total_seconds()
+            if now.tzinfo is None:
+                now = now.replace(tzinfo=timezone.utc)
+            candle_time = latest_candle_time
+            if candle_time.tzinfo is None:
+                candle_time = candle_time.replace(tzinfo=timezone.utc)
+
+            diff = (now - candle_time).total_seconds()
             if diff > self.stale_data_seconds:
                 self.state = CircuitState.WARNING
                 reason = f"Market data feed is stale ({diff:.0f}s since last candle, threshold: {self.stale_data_seconds}s)"

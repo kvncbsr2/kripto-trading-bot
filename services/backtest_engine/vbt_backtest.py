@@ -34,10 +34,30 @@ class VectorBTBacktester:
         exits: pd.Series,
         short_entries: Optional[pd.Series] = None,
         short_exits: Optional[pd.Series] = None,
+        timeframe: str = "15m",
     ) -> Dict[str, Any]:
         """
         Executes vectorized portfolio simulation with fees, slippage, and capital constraints.
+        Dynamically maps timeframe to frequency string.
         """
+        freq_map = {
+            "1m": "1min",
+            "3m": "3min",
+            "5m": "5min",
+            "15m": "15min",
+            "30m": "30min",
+            "1h": "1h",
+            "2h": "2h",
+            "4h": "4h",
+            "6h": "6h",
+            "8h": "8h",
+            "12h": "12h",
+            "1d": "1D",
+            "3d": "3D",
+            "1w": "1W",
+        }
+        mapped_freq = freq_map.get(timeframe.lower(), "15min")
+
         # Ensure indices match close.index to avoid VectorBT broadcast mismatch
         entries = pd.Series(entries.values, index=close.index)
         exits = pd.Series(exits.values, index=close.index)
@@ -56,25 +76,30 @@ class VectorBTBacktester:
                 init_cash=self.initial_capital,
                 fees=self.fees,
                 slippage=self.slippage,
-                freq="15m",
+                freq=mapped_freq,
             )
 
-            total_return_pct = float(pf.total_return()) * 100.0
-            final_value = float(pf.final_value())
+            def _safe_metric(v, default=0.0):
+                if v is None or pd.isna(v) or np.isinf(v):
+                    return default
+                return float(v)
+
+            total_return_pct = _safe_metric(pf.total_return()) * 100.0
+            final_value = _safe_metric(pf.final_value(), self.initial_capital)
             net_pnl = final_value - self.initial_capital
-            max_dd_pct = float(pf.max_drawdown()) * 100.0
-            sharpe = float(pf.sharpe_ratio()) if not pd.isna(pf.sharpe_ratio()) else 0.0
-            sortino = float(pf.sortino_ratio()) if not pd.isna(pf.sortino_ratio()) else 0.0
+            max_dd_pct = _safe_metric(pf.max_drawdown()) * 100.0
+            sharpe = _safe_metric(pf.sharpe_ratio())
+            sortino = _safe_metric(pf.sortino_ratio())
             trades_count = int(pf.trades.count())
-            win_rate = float(pf.trades.win_rate()) * 100.0 if trades_count > 0 else 0.0
+            win_rate = _safe_metric(pf.trades.win_rate()) * 100.0 if trades_count > 0 else 0.0
             pf_raw = pf.trades.profit_factor()
             if pd.isna(pf_raw) or np.isinf(pf_raw):
                 profit_factor = 99.0 if (not pd.isna(pf_raw) and pf_raw > 0) else 0.0
             else:
                 profit_factor = float(pf_raw)
             expectancy = (
-                float(pf.trades.expectancy())
-                if (trades_count > 0 and not pd.isna(pf.trades.expectancy()))
+                _safe_metric(pf.trades.expectancy())
+                if trades_count > 0
                 else 0.0
             )
 

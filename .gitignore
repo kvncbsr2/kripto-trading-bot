@@ -28,9 +28,11 @@ ENV/
 
 # Environment Variables & Secrets
 .env
+.env.*
 .env.local
 *.pem
 *.key
+secrets/
 
 # Database & SQLite
 *.db
@@ -53,6 +55,24 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Node / Frontend
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs & Temporary Scratch Files
+*.log
+logs/
+tum_konusma_gecmisi.txt
+scratch_verification_evidence.json
+temp_*.py
+scratch/
+test_*.db
+
 # OS
 .DS_Store
 Thumbs.db
+

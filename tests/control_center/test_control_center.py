@@ -111,22 +111,45 @@ async def test_scanner_run_action(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_vectorbt_backtest_endpoint(client: AsyncClient):
-    res = await client.post(
-        "/api/backtest/run",
-        json={
-            "symbol": "BTC/USDT",
-            "timeframe": "15m",
-            "strategy": "trend_following",
-            "initial_capital": 5000.0,
-            "fees": 0.001,
-            "slippage_bps": 5.0,
-        },
-    )
-    assert res.status_code == 200
-    data = res.json()
-    assert data["engine"] == "vectorbt"
-    assert "total_net_pnl" in data
-    assert "win_rate" in data
+    from unittest.mock import AsyncMock, patch
+    from datetime import datetime, timezone, timedelta
+    from shared.schemas import Candle
+    from shared.enums import Timeframe
+
+    base_time = datetime.now(timezone.utc)
+    mock_candles = [
+        Candle(
+            symbol="BTC/USDT",
+            timeframe=Timeframe.M15,
+            timestamp=base_time + timedelta(minutes=15 * i),
+            open=60000.0 + i * 10,
+            high=60020.0 + i * 10,
+            low=59980.0 + i * 10,
+            close=60010.0 + i * 10,
+            volume=100.0,
+        )
+        for i in range(100)
+    ]
+    with patch(
+        "apps.api.app.api.routers.backtests.market_data_service.get_historical_klines",
+        new=AsyncMock(return_value=mock_candles),
+    ):
+        res = await client.post(
+            "/api/backtest/run",
+            json={
+                "symbol": "BTC/USDT",
+                "timeframe": "15m",
+                "strategy": "trend_following",
+                "initial_capital": 5000.0,
+                "fees": 0.001,
+                "slippage_bps": 5.0,
+            },
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["engine"] == "vectorbt"
+        assert "total_net_pnl" in data
+        assert "win_rate" in data
 
 
 @pytest.mark.asyncio

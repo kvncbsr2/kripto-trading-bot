@@ -36,8 +36,9 @@ class BinanceMarketScanner:
         self,
         min_24h_volume: Optional[float] = None,
         max_spread_bps: Optional[float] = None,
+        min_volume_24h_usdt: Optional[float] = None,
     ):
-        self.min_24h_volume = min_24h_volume or settings.MIN_24H_VOLUME_USDT
+        self.min_24h_volume = min_volume_24h_usdt or min_24h_volume or settings.MIN_24H_VOLUME_USDT
         self.max_spread_bps = max_spread_bps or settings.MAX_SPREAD_BPS
         self.scanned_symbols: Dict[str, ScannedSymbol] = {}
 
@@ -115,45 +116,63 @@ class BinanceMarketScanner:
         scanned = self.scanned_symbols[symbol]
         return scanned.trade_allowed, scanned.rejection_reason
 
-    async def scan_market(self) -> List[ScannedSymbol]:
-        """Scans all configured default pairs and updates opportunity rankings."""
-        import random
+    async def scan_market(self, market_data_service=None) -> List[ScannedSymbol]:
+        """
+        Scans all configured default pairs using REAL Binance Market Data.
+        Zero random/synthetic price generation (AUDIT-03).
+        """
+        if market_data_service is None:
+            from services.market_data.market_data_service import market_data_service as default_mds
+            market_data_service = default_mds
 
         symbols = settings.DEFAULT_SYMBOLS or ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"]
-        base_prices = {
-            "BTC/USDT": 65000.0,
-            "ETH/USDT": 3400.0,
-            "SOL/USDT": 145.0,
-            "BNB/USDT": 580.0,
-            "XRP/USDT": 0.58,
-            "DOGE/USDT": 0.12,
-            "ADA/USDT": 0.45,
-            "AVAX/USDT": 28.0,
-            "LINK/USDT": 14.5,
-        }
 
         results: List[ScannedSymbol] = []
         for sym in symbols:
-            p = base_prices.get(sym, 100.0) * (1.0 + random.uniform(-0.005, 0.005))
-            vol = random.uniform(15_000_000.0, 800_000_000.0)
-            spread_bps = random.uniform(1.5, 9.0)
-            spread = p * (spread_bps / 10000.0)
-            bid = p - spread / 2.0
-            ask = p + spread / 2.0
-            high = p * 1.025
-            low = p * 0.975
-            feat_score = random.uniform(55.0, 85.0)
+            try:
+                ticker = await market_data_service.get_live_ticker(sym)
+                if not ticker or float(ticker.get("price", 0.0)) <= 0:
+                    continue
 
-            scanned = self.scan_symbol_metrics(
-                symbol=sym,
-                price=p,
-                volume_24h=vol,
-                bid=bid,
-                ask=ask,
-                high_24h=high,
-                low_24h=low,
-                feature_score=feat_score,
-            )
-            results.append(scanned)
+                p = float(ticker.get("price", 0.0))
+                bid = float(ticker.get("bid", 0.0))
+                ask = float(ticker.get("ask", 0.0))
+                vol = float(ticker.get("volume_24h", 0.0))
+                high_24h = float(ticker.get("high_24h", 0.0) or ticker.get("high", 0.0))
+                low_24h = float(ticker.get("low_24h", 0.0) or ticker.get("low", 0.0))
+
+                # ZERO SYNTHETIC DATA: Fail-closed if real bid/ask or price are missing or inverted
+                if p <= 0.0 or bid <= 0.0 or ask <= 0.0 or ask < bid:
+                    logger.warning(
+                        f"scanner_reject_invalid_ticker: {sym} p={p} bid={bid} ask={ask}"
+                    )
+                    continue
+
+                # Deterministic feature score based on real spread tightness
+                spread_bps = float(ticker.get("spread_bps", 0.0))
+                if spread_bps <= 0.0 and ask > 0.0:
+                    spread_bps = ((ask - bid) / ask) * 10000.0
+                spread_penalty = max(0.0, min(50.0, spread_bps * 2.0))
+                feature_score = max(10.0, min(95.0, 75.0 - spread_penalty))
+
+                scanned = self.scan_symbol_metrics(
+                    symbol=sym,
+                    price=p,
+                    volume_24h=vol,
+                    bid=bid,
+                    ask=ask,
+                    high_24h=high_24h,
+                    low_24h=low_24h,
+                    feature_score=feature_score,
+                )
+                results.append(scanned)
+            except Exception as e:
+                logger.warning(f"Failed to scan symbol {sym} using real market data: {e}")
 
         return self.get_ranked_opportunities()
+
+
+# Aliases
+MarketScanner = BinanceMarketScanner
+market_scanner = BinanceMarketScanner()
+__all__ = ["BinanceMarketScanner", "MarketScanner", "market_scanner", "ScannedSymbol"]

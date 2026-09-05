@@ -45,13 +45,21 @@ class OrderSide(str, Enum):
 
 
 class OrderStatus(str, Enum):
-    PENDING = "PENDING"
-    OPEN = "OPEN"
-    FILLED = "FILLED"
+    CREATED = "CREATED"
+    SUBMITTING = "SUBMITTING"
+    SUBMITTED = "SUBMITTED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
+    FILLED = "FILLED"
+    CANCEL_PENDING = "CANCEL_PENDING"
     CANCELLED = "CANCELLED"
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
+    UNKNOWN = "UNKNOWN"
+    ERROR = "ERROR"
+    # Backward compatibility aliases
+    PENDING = "PENDING"
+    OPEN = "OPEN"
 
 
 class PositionSide(str, Enum):
