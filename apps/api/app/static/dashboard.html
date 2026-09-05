@@ -119,14 +119,14 @@
                 <div id="val-profit" class="text-2xl font-black font-mono mt-1 text-slate-300">+$0.00</div>
                 <div class="text-[11px] text-slate-500 mt-1 flex justify-between font-mono">
                     <span>Günlük Hedef:</span>
-                    <span class="text-blue-400 font-bold">+$50.00</span>
+                    <span id="val-daily-target" class="text-blue-400 font-bold">+$75.00</span>
                 </div>
             </div>
 
             <!-- 3. Açık Pozisyon Sayısı -->
             <div class="card p-4">
                 <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Açık Pozisyonlar</div>
-                <div id="val-open-count" class="text-2xl font-black text-white font-mono mt-1">0 <span class="text-xs font-normal text-slate-500">/ 4 Maks</span></div>
+                <div id="val-open-count" class="text-2xl font-black text-white font-mono mt-1">0 <span class="text-xs font-normal text-slate-500">/ 20 Maks</span></div>
                 <div class="text-[11px] text-slate-500 mt-1 flex justify-between font-mono">
                     <span>Açık Hacim:</span>
                     <span id="val-exposure" class="text-slate-300">$0.00</span>
@@ -882,6 +882,18 @@
                     } else {
                         profitEl.innerText = '+$0.00';
                         profitEl.className = 'text-2xl font-black font-mono mt-1 text-slate-300';
+                    }
+
+                    const targetEl = document.getElementById('val-daily-target');
+                    if (targetEl) {
+                        if (netProfit >= 75.0) {
+                            targetEl.innerHTML = '<span class="text-emerald-400 font-bold">+$75.00 (🎯 Tamamlandı!)</span>';
+                        } else if (netProfit > 0) {
+                            const pct = Math.min(100, Math.round((netProfit / 75.0) * 100));
+                            targetEl.innerHTML = `<span class="text-blue-400 font-bold">+$75.00</span> <span class="text-[10px] text-emerald-400 font-mono font-bold">(%${pct})</span>`;
+                        } else {
+                            targetEl.innerHTML = '<span class="text-blue-400 font-bold">+$75.00</span>';
+                        }
                     }
                 }
 

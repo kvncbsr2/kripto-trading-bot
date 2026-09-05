@@ -76,8 +76,9 @@ class Settings(BaseSettings):
     # Risk Management
     RISK_PER_TRADE: float = 0.01  # 1.0% -> $50 per trade on $5,000 equity (balanced for 20 positions)
     DAILY_MAX_LOSS: float = 400.0  # $400 max loss per day
-    DAILY_TARGET_MIN: float = 20.0
-    DAILY_TARGET_MAX: float = 100.0
+    DAILY_TARGET: float = 75.0  # $75.00 daily profit goal
+    DAILY_TARGET_MIN: float = 75.0  # Soft target threshold
+    DAILY_TARGET_MAX: float = 150.0  # Hard daily max target ceiling
     TARGET_MODE: str = "SOFT"  # SOFT or HARD
     MAX_TRADES_PER_DAY: int = 50
     MAX_OPEN_POSITIONS: int = 20
@@ -105,7 +106,7 @@ class Settings(BaseSettings):
     MIN_SIGNAL_SCORE: float = 70.0
     MIN_OPPORTUNITY_SCORE: float = 50.0
 
-    # Market Universe
+    # Market Universe - Top 25 Liquid Binance Spot Pairs
     DEFAULT_SYMBOLS: list[str] = [
         "BTC/USDT",
         "ETH/USDT",
@@ -116,6 +117,22 @@ class Settings(BaseSettings):
         "ADA/USDT",
         "AVAX/USDT",
         "LINK/USDT",
+        "SUI/USDT",
+        "NEAR/USDT",
+        "APT/USDT",
+        "ARB/USDT",
+        "OP/USDT",
+        "RENDER/USDT",
+        "FET/USDT",
+        "INJ/USDT",
+        "TIA/USDT",
+        "DOT/USDT",
+        "MATIC/USDT",
+        "PEPE/USDT",
+        "SHIB/USDT",
+        "LDO/USDT",
+        "STX/USDT",
+        "GALA/USDT",
     ]
     TIMEFRAMES: list[str] = ["1m", "5m", "15m", "1h", "4h", "1d"]
 

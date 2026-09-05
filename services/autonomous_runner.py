@@ -21,7 +21,12 @@ from shared.logging import add_system_log, get_logger
 logger = get_logger("autonomous-trader", service="autonomous_trader")
 settings = get_settings()
 
-WATCH_SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT"]
+WATCH_SYMBOLS = list(getattr(settings, "DEFAULT_SYMBOLS", [
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT",
+    "ADA/USDT", "AVAX/USDT", "LINK/USDT", "SUI/USDT", "NEAR/USDT", "APT/USDT",
+    "ARB/USDT", "OP/USDT", "RENDER/USDT", "FET/USDT", "INJ/USDT", "TIA/USDT",
+    "DOT/USDT", "MATIC/USDT", "PEPE/USDT", "SHIB/USDT", "LDO/USDT", "STX/USDT", "GALA/USDT"
+]))
 
 
 def _cycle_interval_for_timeframe(timeframe: str) -> int:
