@@ -43,6 +43,7 @@ risk_engine = RiskEngine(
     daily_target_max=settings.DAILY_TARGET_MAX,
     is_spot_mode=True,
     max_trades_per_day=settings.MAX_TRADES_PER_DAY,
+    max_position_equity_ratio=getattr(settings, "MAX_POSITION_EQUITY_RATIO", 0.40),
 )
 
 paper_broker = PaperBroker(

@@ -33,6 +33,7 @@ class RiskEngine:
         daily_target_max: float = 100.0,
         is_spot_mode: bool = True,
         max_trades_per_day: int = 5,
+        max_position_equity_ratio: float = 0.40,
     ):
         self.risk_per_trade = risk_per_trade
         self.daily_max_loss_usd = daily_max_loss_usd
@@ -43,6 +44,7 @@ class RiskEngine:
         self.daily_target_max = daily_target_max
         self.is_spot_mode = is_spot_mode
         self.max_trades_per_day = max_trades_per_day
+        self.max_position_equity_ratio = max_position_equity_ratio
 
         self.circuit_breaker = CircuitBreaker(
             daily_max_loss_usd=self.daily_max_loss_usd,
@@ -166,12 +168,13 @@ class RiskEngine:
                 reason=f"Invalid Stop/Target geometry or R:R below minimum required ({self.min_risk_reward})",
             )
 
-        # 6. Sizing Calculation (0.5% risk = $25 on $5,000 equity)
+        # 6. Sizing Calculation (e.g. 2% risk = $100 on $5,000 equity)
         size, risk_amount = calculate_atr_position_size(
             equity=portfolio.equity,
             entry_price=signal.entry_price,
             stop_price=signal.stop_price,
             risk_per_trade=self.risk_per_trade,
+            max_position_equity_ratio=self.max_position_equity_ratio,
         )
 
         if size <= 0:

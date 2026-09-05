@@ -7,7 +7,7 @@ def calculate_atr_position_size(
     stop_price: float,
     risk_per_trade: float = 0.005,  # 0.5%
     min_size: float = 0.0001,
-    max_position_equity_ratio: float = 0.25,  # Max 25% of total capital in single trade
+    max_position_equity_ratio: float = 0.40,  # Max 40% of total capital in single trade ($2,000 on $5,000)
 ) -> Tuple[float, float]:
     """
     Calculates size based on ATR stop distance:

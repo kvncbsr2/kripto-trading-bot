@@ -66,6 +66,7 @@ class AutonomousPaperTrader:
             daily_max_loss_usd=settings.DAILY_MAX_LOSS,
             risk_per_trade=settings.RISK_PER_TRADE,
             max_trades_per_day=settings.MAX_TRADES_PER_DAY,
+            max_position_equity_ratio=getattr(settings, "MAX_POSITION_EQUITY_RATIO", 0.40),
         )
         self.strategy = create_r10_strategy_from_settings()
         self.feature_engine = FeatureEngine()
