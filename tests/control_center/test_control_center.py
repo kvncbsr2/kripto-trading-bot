@@ -9,6 +9,8 @@ settings = get_settings()
 
 @pytest.fixture
 async def client():
+    from apps.api.app.api.state import RUNTIME_STATE
+    RUNTIME_STATE["is_halted"] = False
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

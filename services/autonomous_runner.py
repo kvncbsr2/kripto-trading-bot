@@ -24,6 +24,22 @@ settings = get_settings()
 WATCH_SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT"]
 
 
+def _cycle_interval_for_timeframe(timeframe: str) -> int:
+    """
+    FIX (2026-09, efficiency): previously cycle_interval was hardcoded to 15s
+    regardless of R10_TIMEFRAME. On 1h candles that meant re-fetching/re-evaluating
+    the same still-open candle ~240 times per hour — not incorrect (the causal
+    strategy only emits a signal on a newly CLOSED candle), just wasted API calls
+    and log noise. Scans at roughly 1/60th of the candle duration, so a newly
+    closed candle is still picked up promptly, bounded to [15s, 120s].
+    """
+    seconds_per_tf = {
+        "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400,
+    }
+    tf_seconds = seconds_per_tf.get(timeframe, 900)
+    return max(15, min(120, tf_seconds // 60))
+
+
 class AutonomousPaperTrader:
     """
     Authoritative Causal Autonomous Paper Trader for KRIPTO AGENT V6.1.
@@ -56,7 +72,7 @@ class AutonomousPaperTrader:
 
         # Requirement 4: Starts in OFF state by default
         self.is_active: bool = False
-        self.cycle_interval: int = 15
+        self.cycle_interval: int = _cycle_interval_for_timeframe(settings.R10_TIMEFRAME)
         self.cycle_count: int = 0
         self.last_cycle_at: Optional[str] = None
         self.last_action: str = "Otonom motor beklemede (OFF). Kullanıcı başlatması bekleniyor."
