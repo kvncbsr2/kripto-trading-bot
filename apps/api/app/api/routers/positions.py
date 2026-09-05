@@ -26,12 +26,16 @@ async def get_positions(status: str = "OPEN", db: AsyncSession = Depends(get_asy
     Returns active or historical positions from DB and authoritative PaperBroker.
     Strictly Zero Fake Data: Returns empty list if no positions exist.
     """
-    stmt = select(PositionModel)
-    if status.upper() != "ALL":
-        stmt = stmt.where(PositionModel.status == status.upper())
-    stmt = stmt.order_by(PositionModel.created_at.desc())
-    res = await db.execute(stmt)
-    positions = list(res.scalars().all())
+    positions = []
+    try:
+        stmt = select(PositionModel)
+        if status.upper() != "ALL":
+            stmt = stmt.where(PositionModel.status == status.upper())
+        stmt = stmt.order_by(PositionModel.created_at.desc())
+        res = await db.execute(stmt)
+        positions = list(res.scalars().all())
+    except Exception:
+        pass
 
     pos_list = [
         {

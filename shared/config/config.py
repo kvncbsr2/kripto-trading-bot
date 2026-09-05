@@ -57,10 +57,10 @@ class Settings(BaseSettings):
 
     # R10 RSI Divergence Configuration
     R10_ENABLED: bool = True
-    R10_TIMEFRAME: str = "1h"
+    R10_TIMEFRAME: str = "15m"
     R10_RSI_LENGTH: int = 14
-    R10_PIVOT_LEFT: int = 5
-    R10_PIVOT_RIGHT: int = 5
+    R10_PIVOT_LEFT: int = 3
+    R10_PIVOT_RIGHT: int = 3
     R10_CONFIRMATION_ENABLED: bool = True
 
     # V2 7-Day $5,000 Experiment Configuration
@@ -74,8 +74,8 @@ class Settings(BaseSettings):
     DAILY_TARGET_MIN: float = 20.0
     DAILY_TARGET_MAX: float = 100.0
     TARGET_MODE: str = "SOFT"  # SOFT or HARD
-    MAX_TRADES_PER_DAY: int = 5
-    MAX_OPEN_POSITIONS: int = 2
+    MAX_TRADES_PER_DAY: int = 10
+    MAX_OPEN_POSITIONS: int = 3
     LEVERAGE: float = 1.0
 
     # Execution & Cost Simulation
@@ -92,8 +92,8 @@ class Settings(BaseSettings):
     ATR_SL_MULTIPLIER: float = 1.5
     MIN_RISK_REWARD: float = 1.5
     PREFERRED_RISK_REWARD: float = 2.0
-    MIN_SIGNAL_SCORE: float = 70.0
-    MIN_OPPORTUNITY_SCORE: float = 50.0
+    MIN_SIGNAL_SCORE: float = 60.0
+    MIN_OPPORTUNITY_SCORE: float = 40.0
 
     # Market Universe
     DEFAULT_SYMBOLS: list[str] = [
