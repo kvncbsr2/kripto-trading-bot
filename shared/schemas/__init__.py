@@ -112,10 +112,10 @@ class Signal(BaseModel):
 
 # Risk Schemas
 class RiskLimits(BaseModel):
-    max_risk_per_trade: float = 0.02  # 2.0%
-    max_daily_loss: float = 0.06  # 6.0%
-    max_drawdown: float = 0.10  # 10.0%
-    max_open_positions: int = 10
+    max_risk_per_trade: float = 0.01  # 1.0%
+    max_daily_loss: float = 0.08  # 8.0%
+    max_drawdown: float = 0.15  # 15.0%
+    max_open_positions: int = 20
     risk_reward_ratio: float = 2.0
 
 

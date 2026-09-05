@@ -74,14 +74,14 @@ class Settings(BaseSettings):
     BASE_CURRENCY: str = "USDT"
 
     # Risk Management
-    RISK_PER_TRADE: float = 0.02  # 2.0% -> $100 per trade on $5,000 equity
-    DAILY_MAX_LOSS: float = 300.0  # $300 max loss per day
+    RISK_PER_TRADE: float = 0.01  # 1.0% -> $50 per trade on $5,000 equity (balanced for 20 positions)
+    DAILY_MAX_LOSS: float = 400.0  # $400 max loss per day
     DAILY_TARGET_MIN: float = 20.0
     DAILY_TARGET_MAX: float = 100.0
     TARGET_MODE: str = "SOFT"  # SOFT or HARD
-    MAX_TRADES_PER_DAY: int = 35
-    MAX_OPEN_POSITIONS: int = 10
-    MAX_POSITION_EQUITY_RATIO: float = 0.40  # Max 40% ($2,000) in single trade
+    MAX_TRADES_PER_DAY: int = 50
+    MAX_OPEN_POSITIONS: int = 20
+    MAX_POSITION_EQUITY_RATIO: float = 0.20  # Max 20% ($1,000) in single trade for balanced basket
     LEVERAGE: float = 1.0
 
     # Execution & Cost Simulation
