@@ -24,6 +24,8 @@ logger = get_logger("llm-provider", service="llm")
 class BaseLLMProvider(ABC):
     """Abstract Base Class for LLM providers."""
 
+    engine_name: str = "UNKNOWN_ENGINE"
+
     @abstractmethod
     async def generate(
         self,
@@ -37,10 +39,12 @@ class BaseLLMProvider(ABC):
 
 class HeuristicFallbackProvider(BaseLLMProvider):
     """
-    Deterministic rule-based reasoning engine.
+    Deterministic rule-based quantitative reasoning engine.
     Used when no external LLM API key is configured or during unit test execution.
     Guarantees 100% uptime, zero latency, and zero hallucination.
     """
+
+    engine_name: str = "QUANTITATIVE_HEURISTIC_RULE_ENGINE"
 
     async def generate(
         self,
@@ -118,6 +122,8 @@ class HeuristicFallbackProvider(BaseLLMProvider):
 class OpenAICompatibleProvider(BaseLLMProvider):
     """Supports OpenAI, DeepSeek, Groq, or any OpenAI-compatible REST endpoint."""
 
+    engine_name: str = "EXTERNAL_LLM"
+
     def __init__(
         self,
         api_key: str,
@@ -165,6 +171,8 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
 class OllamaProvider(BaseLLMProvider):
     """Supports local, free offline LLMs via Ollama (e.g. qwen2.5, llama3, mistral)."""
+
+    engine_name: str = "LOCAL_OLLAMA_LLM"
 
     def __init__(
         self,

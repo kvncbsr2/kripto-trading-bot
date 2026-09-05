@@ -1,7 +1,7 @@
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from services.execution.execution_interface import ExecutionEngine
 from shared.config import get_settings
@@ -512,7 +512,11 @@ class PaperExecutionEngine(ExecutionEngine):
         decision: RiskDecision,
         strategy_name: str = "",
     ) -> Tuple[Order, Fill, Position]:
-        return self.execute_market_order(decision, strategy_name)
+        return self.execute_market_order(
+            decision,
+            strategy_name,
+            execution_style=getattr(settings, "EXECUTION_STYLE", "TAKER"),
+        )
 
     async def cancel_order(self, order_id: str) -> bool:
         if order_id in self.orders:
@@ -550,6 +554,7 @@ class PaperExecutionEngine(ExecutionEngine):
         decision: RiskDecision,
         strategy_name: str = "",
         order_id: Optional[str] = None,
+        execution_style: Literal["TAKER", "MAKER"] = "TAKER",
     ) -> Tuple[Order, Fill, Position]:
         """
         Executes simulated market fill based strictly on an approved RiskDecision.
@@ -576,15 +581,26 @@ class PaperExecutionEngine(ExecutionEngine):
         side = OrderSide.BUY if decision.direction == SignalDirection.LONG else OrderSide.SELL
         pos_side = PositionSide.LONG if decision.direction == SignalDirection.LONG else PositionSide.SHORT
 
-        # Realistic Slippage modeling
-        base_price = decision.entry_price
-        slippage_mult = (1.0 + self.slippage_rate) if side == OrderSide.BUY else (1.0 - self.slippage_rate)
-        exec_price = round(base_price * slippage_mult, 4 if base_price < 10 else 2)
-        slippage_cost = round(abs(exec_price - base_price) * decision.calculated_size, 4)
+        execution_style = str(execution_style).upper()
+        if execution_style not in {"TAKER", "MAKER"}:
+            raise ValueError("execution_style must be TAKER or MAKER")
 
-        # Taker Fee
+        # Cost model: TAKER incurs configured adverse slippage + taker fee.
+        # MAKER models a resting-limit-style fill at decision price with maker fee;
+        # it does NOT assume queue priority or guaranteed fill, so callers should
+        # only use this path for a completed-fill counterfactual/backtest.
+        base_price = decision.entry_price
+        if execution_style == "TAKER":
+            slippage_mult = (1.0 + self.slippage_rate) if side == OrderSide.BUY else (1.0 - self.slippage_rate)
+            exec_price = round(base_price * slippage_mult, 4 if base_price < 10 else 2)
+            fee_rate = self.taker_fee
+        else:
+            exec_price = round(base_price, 4 if base_price < 10 else 2)
+            fee_rate = self.maker_fee
+
+        slippage_cost = round(abs(exec_price - base_price) * decision.calculated_size, 4)
         notional = exec_price * decision.calculated_size
-        fee = round(notional * self.taker_fee, 4)
+        fee = round(notional * fee_rate, 4)
 
         # Available Balance Check
         if side == OrderSide.BUY and notional + fee > self.available_balance:
@@ -601,7 +617,7 @@ class PaperExecutionEngine(ExecutionEngine):
         order = Order(
             order_id=order_id,
             symbol=decision.symbol,
-            order_type=OrderType.MARKET,
+            order_type=OrderType.MARKET if execution_style == "TAKER" else OrderType.LIMIT,
             side=side,
             quantity=decision.calculated_size,
             price=base_price,

@@ -1,0 +1,478 @@
+diff --git a/apps/api/app/api/routers/agents_hub.py b/apps/api/app/api/routers/agents_hub.py
+index cee66b9..460756c 100644
+--- a/apps/api/app/api/routers/agents_hub.py
++++ b/apps/api/app/api/routers/agents_hub.py
+@@ -13,12 +13,16 @@ from fastapi import APIRouter, Query
+ 
+ from agents.debate.bull_bear_engine import BullBearDebateEngine
+ from agents.judge.performance_judge import performance_judge
+-from apps.api.app.api.state import RUNTIME_STATE, paper_broker, risk_engine
++from apps.api.app.api.state import RUNTIME_STATE, market_data_service, paper_broker, risk_engine
+ from services.analytics.trade_reflection import trade_reflection_engine
++from services.feature_engine.features import FeatureEngine
+ from services.market_data.binance_derivatives import derivatives_service
+ from services.market_data.crypto_sentiment import sentiment_service
++from shared.enums import Timeframe
++from shared.logging import get_logger
+ 
+ router = APIRouter(prefix="", tags=["Agents & Intelligence"])
++logger = get_logger("agents-hub", service="agents_hub")
+ 
+ debate_engine = BullBearDebateEngine()
+ 
+@@ -27,23 +31,83 @@ debate_engine = BullBearDebateEngine()
+ async def get_bull_bear_debate(symbol: str = Query("BTC/USDT", description="Trading pair symbol")) -> Dict[str, Any]:
+     """
+     Runs a structured Bull vs Bear dialectic debate for the specified symbol.
++
++    FIX (2026-09): This endpoint previously fed the debate engine hardcoded
++    context (current_price=0.0, rsi=50.0, ema_20/50=0.0) regardless of the
++    requested symbol — a direct violation of the project's own "Zero Fake Data"
++    policy. It now pulls a real live ticker + real 15m candles from Binance via
++    MarketDataService and computes real RSI/EMA20/EMA50/realized_vol via
++    FeatureEngine, exactly like the live trading path does. If real data cannot
++    be fetched, the endpoint is transparent about it (data_quality=UNAVAILABLE)
++    instead of fabricating numbers.
+     """
+     deriv_data = await derivatives_service.get_derivatives_metrics(symbol)
+     fng_data = await sentiment_service.get_fear_and_greed_index()
+ 
++    data_quality = "OK"
++    current_price = 0.0
++    features: Dict[str, Any] = {"rsi": None, "ema_20": None, "ema_50": None, "realized_vol": None}
++    orderbook_ctx: Dict[str, Any] = {"spread_bps": None}
++
++    try:
++        ticker = await market_data_service.get_live_ticker(symbol)
++        candles = await market_data_service.get_historical_candles(symbol, timeframe="15m", limit=100)
++        orderbook = await market_data_service.get_orderbook(symbol, limit=10)
++
++        if ticker and ticker.get("price"):
++            current_price = float(ticker["price"])
++        else:
++            data_quality = "UNAVAILABLE"
++
++        if candles and len(candles) >= 5:
++            fv = FeatureEngine.get_latest_feature_vector(candles, symbol=symbol, timeframe=Timeframe.M15)
++            if fv is not None:
++                features = {
++                    "rsi": fv.indicators.get("rsi"),
++                    "ema_20": fv.indicators.get("ema_20"),
++                    "ema_50": fv.indicators.get("ema_50"),
++                    "realized_vol": fv.indicators.get("realized_vol"),
++                }
++            else:
++                data_quality = "UNAVAILABLE"
++        else:
++            data_quality = "UNAVAILABLE"
++
++        if orderbook and orderbook.get("spread_bps") is not None:
++            orderbook_ctx = {"spread_bps": orderbook["spread_bps"]}
++        else:
++            data_quality = "UNAVAILABLE"
++    except Exception as e:
++        logger.error(f"Failed to build real debate context for {symbol}: {e}")
++        data_quality = "UNAVAILABLE"
++
++    # BullBearDebateEngine's rule-based fallback does numeric formatting (f"{rsi:.1f}")
++    # on these fields with no None-check, so on UNAVAILABLE we still pass its own
++    # neutral defaults through — but data_quality below tells the caller these are
++    # NOT real numbers, unlike before where this was silently indistinguishable.
++    safe_features = {
++        "rsi": features["rsi"] if features["rsi"] is not None else 50.0,
++        "ema_20": features["ema_20"] if features["ema_20"] is not None else 0.0,
++        "ema_50": features["ema_50"] if features["ema_50"] is not None else 0.0,
++        "realized_vol": features["realized_vol"] if features["realized_vol"] is not None else 0.35,
++    }
++    safe_orderbook = {"spread_bps": orderbook_ctx["spread_bps"] if orderbook_ctx["spread_bps"] is not None else 2.0}
++
+     context = {
+         "symbol": symbol,
+-        "current_price": 0.0,
+-        "features": {"rsi": 50.0, "ema_20": 0.0, "ema_50": 0.0, "realized_vol": 0.35},
++        "current_price": current_price,
++        "features": safe_features,
+         "sentiment": fng_data,
+         "derivatives": deriv_data,
+-        "orderbook": {"spread_bps": 2.0},
++        "orderbook": safe_orderbook,
++        "data_quality": data_quality,
+     }
+ 
+     verdict = await debate_engine.run_debate(context)
+     return {
+         "status": "success",
+         "symbol": symbol,
++        "data_quality": data_quality,
+         "verdict": verdict.model_dump(),
+     }
+ 
+diff --git a/apps/api/app/api/routers/market.py b/apps/api/app/api/routers/market.py
+index 912be07..a8e88de 100644
+--- a/apps/api/app/api/routers/market.py
++++ b/apps/api/app/api/routers/market.py
+@@ -4,12 +4,14 @@ import pandas as pd
+ from fastapi import APIRouter, HTTPException, Query
+ 
+ from apps.api.app.api.state import command_bus, market_data_service
+-from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
++from services.strategy_engine.strategies.r10_rsi_divergence import create_r10_strategy_from_settings
+ from shared.config import get_settings
+ 
+ router = APIRouter(tags=["market"])
+ settings = get_settings()
+-r10_strategy = R10RSIDivergenceStrategy()
++# FIX (2026-09): was R10RSIDivergenceStrategy() with class defaults, now settings-driven
++# via the shared factory so this endpoint can never silently diverge from the live bot.
++r10_strategy = create_r10_strategy_from_settings(settings)
+ 
+ 
+ @router.get("/market/status")
+diff --git a/apps/api/app/api/routers/signals.py b/apps/api/app/api/routers/signals.py
+index 67ddaba..dffdd52 100644
+--- a/apps/api/app/api/routers/signals.py
++++ b/apps/api/app/api/routers/signals.py
+@@ -9,11 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ from apps.api.app.api.state import RUNTIME_STATE, market_data_service, risk_engine
+ from database.models.tables import SignalModel
+ from database.session import get_async_db
+-from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
++from services.strategy_engine.strategies.r10_rsi_divergence import create_r10_strategy_from_settings
+ from shared.enums import SignalDirection
+ 
+ router = APIRouter(tags=["signals"])
+-r10_strategy = R10RSIDivergenceStrategy()
++# FIX (2026-09): was R10RSIDivergenceStrategy() with class defaults, now settings-driven
++# via the shared factory so this endpoint can never silently diverge from the live bot.
++r10_strategy = create_r10_strategy_from_settings()
+ 
+ 
+ class GenerateSignalRequest(BaseModel):
+diff --git a/apps/api/app/middleware/auth.py b/apps/api/app/middleware/auth.py
+index e5aa375..070871e 100644
+--- a/apps/api/app/middleware/auth.py
++++ b/apps/api/app/middleware/auth.py
+@@ -1,3 +1,4 @@
++import secrets as _secrets
+ from enum import Enum
+ from typing import Optional
+ 
+@@ -33,9 +34,14 @@ async def verify_api_key_or_token(
+         return Role.ADMIN
+ 
+     # 1. Check Bearer token
++    # FIX (2026-09): constant-time comparison (secrets.compare_digest) instead of ==,
++    # to avoid a timing side-channel on secret comparison. Low real-world risk here,
++    # but it's the correct primitive for comparing credentials.
+     if auth_cred and auth_cred.credentials:
+         token = auth_cred.credentials.strip()
+-        if token == settings.API_AUTH_SECRET or token == settings.API_ADMIN_KEY:
++        if _secrets.compare_digest(token, settings.API_AUTH_SECRET) or _secrets.compare_digest(
++            token, settings.API_ADMIN_KEY
++        ):
+             return Role.ADMIN
+         logger.warning("Invalid Bearer token received.")
+         raise HTTPException(
+@@ -46,7 +52,9 @@ async def verify_api_key_or_token(
+     # 2. Check X-API-KEY header
+     if x_api_key:
+         clean_key = x_api_key.strip()
+-        if clean_key == settings.API_ADMIN_KEY or clean_key == settings.API_AUTH_SECRET:
++        if _secrets.compare_digest(clean_key, settings.API_ADMIN_KEY) or _secrets.compare_digest(
++            clean_key, settings.API_AUTH_SECRET
++        ):
+             return Role.ADMIN
+         logger.warning("Invalid X-API-KEY header received.")
+         raise HTTPException(
+diff --git a/services/autonomous_runner.py b/services/autonomous_runner.py
+index 873fa29..d1e7239 100644
+--- a/services/autonomous_runner.py
++++ b/services/autonomous_runner.py
+@@ -10,7 +10,7 @@ from services.market_data.market_data_service import MarketDataService
+ from services.notification_service.telegram_service import telegram_service
+ from services.risk_engine.btc_regime_shield import btc_regime_shield
+ from services.risk_engine.risk_engine import RiskEngine
+-from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
++from services.strategy_engine.strategies.r10_rsi_divergence import create_r10_strategy_from_settings
+ from shared.config import get_settings
+ from shared.enums import PositionStatus, SignalDirection
+ from shared.logging import add_system_log, get_logger
+@@ -48,12 +48,7 @@ class AutonomousPaperTrader:
+             risk_per_trade=settings.RISK_PER_TRADE,
+             max_trades_per_day=settings.MAX_TRADES_PER_DAY,
+         )
+-        self.strategy = R10RSIDivergenceStrategy(
+-            left_bars=settings.R10_PIVOT_LEFT,
+-            right_bars=settings.R10_PIVOT_RIGHT,
+-            min_signal_score=settings.MIN_SIGNAL_SCORE,
+-            timeframe=settings.R10_TIMEFRAME,
+-        )
++        self.strategy = create_r10_strategy_from_settings(settings)
+         self.feature_engine = FeatureEngine()
+ 
+         # Requirement 4: Starts in OFF state by default
+@@ -67,6 +62,25 @@ class AutonomousPaperTrader:
+     def bind_command_bus(self, command_bus_instance):
+         self.command_bus = command_bus_instance
+ 
++        # FIX (2026-09): Previously self.strategy was a fully independent
++        # R10RSIDivergenceStrategy instance. command_bus.execute_toggle_strategy()
++        # only flipped `.enabled` on the copy living inside
++        # command_bus.strategy_manager.strategies, which this runner never looked at —
++        # so "disable R10" from the dashboard silently did nothing to the live loop.
++        # We now rebind self.strategy to that SAME object (by name) so toggling one
++        # toggles the other. If no matching strategy is found, we keep the
++        # settings-driven instance created in __init__ as a safe fallback.
++        strategy_manager = getattr(command_bus_instance, "strategy_manager", None)
++        if strategy_manager is not None:
++            for strat in getattr(strategy_manager, "strategies", []):
++                if getattr(strat, "name", "") == self.strategy.name:
++                    self.strategy = strat
++                    logger.info(
++                        f"AutonomousPaperTrader: bound live strategy instance to "
++                        f"StrategyManager's '{strat.name}' (dashboard toggle now takes effect)."
++                    )
++                    break
++
+     def bind_market_data_service(self, market_data_service: MarketDataService):
+         self.market_data_service = market_data_service
+ 
+@@ -167,6 +181,19 @@ class AutonomousPaperTrader:
+                 except Exception as e:
+                     logger.warning(f"Failed to fetch live price for open position {symbol}: {e}")
+ 
++        # ---------------------------------------------------------------------
++        # 1.5 FIX (2026-09): Respect strategy.enabled (dashboard "disable" command).
++        # Open positions above are still monitored/closed normally; only NEW signal
++        # scanning is paused while the strategy is disabled.
++        # ---------------------------------------------------------------------
++        if not self.strategy.enabled:
++            self.last_action = (
++                f"Strateji '{self.strategy.name}' devre dışı bırakıldı. "
++                f"Yeni sinyal taraması durduruldu, açık pozisyonlar izlenmeye devam ediyor."
++            )
++            self._sync_runtime_state()
++            return {"action": "STRATEGY_DISABLED", "strategy": self.strategy.name}
++
+         # ---------------------------------------------------------------------
+         # 2. Evaluate Strategy and Risk Engine for New Positions
+         # ---------------------------------------------------------------------
+@@ -210,7 +237,13 @@ class AutonomousPaperTrader:
+                     if not can_trade:
+                         return {"symbol": sym, "status": "shield_blocked", "reason": shield_msg}
+ 
+-                    candles = await mds.get_historical_klines(sym, timeframe="15m", limit=100)
++                    # FIX (2026-09): was hardcoded to "15m" — R10_TIMEFRAME in .env had
++                    # ZERO effect on what the live bot actually scanned, even though the
++                    # strategy object itself was built with the configured timeframe.
++                    # Switching to 1h/4h (recommended to reduce fee/slippage drag as a
++                    # % of typical move size) now actually works end-to-end.
++                    scan_timeframe = getattr(self.strategy, "timeframe", None) or settings.R10_TIMEFRAME
++                    candles = await mds.get_historical_klines(sym, timeframe=scan_timeframe, limit=100)
+                     if not candles or len(candles) < 30:
+                         return {"symbol": sym, "status": "insufficient_data"}
+ 
+diff --git a/services/execution/order_manager.py b/services/execution/order_manager.py
+index 589a969..8d75f7d 100644
+--- a/services/execution/order_manager.py
++++ b/services/execution/order_manager.py
+@@ -141,10 +141,14 @@ class OrderManager:
+             order.status = OrderStatus.SUBMITTED
+             # Execute on broker/exchange
+             if hasattr(self.execution_engine, "execute_market_order"):
++                from shared.config import get_settings
++
++                exec_style = getattr(get_settings(), "EXECUTION_STYLE", "TAKER")
+                 exec_order, fill, pos = self.execution_engine.execute_market_order(
+                     decision=decision,
+                     strategy_name=strategy_name,
+                     order_id=order_id,
++                    execution_style=exec_style,
+                 )
+             else:
+                 exec_order, fill, pos = await self.execution_engine.submit_order(
+diff --git a/services/execution/paper_execution.py b/services/execution/paper_execution.py
+index 9215e76..83801f9 100644
+--- a/services/execution/paper_execution.py
++++ b/services/execution/paper_execution.py
+@@ -550,10 +550,19 @@ class PaperExecutionEngine(ExecutionEngine):
+         decision: RiskDecision,
+         strategy_name: str = "",
+         order_id: Optional[str] = None,
++        execution_style: str = "TAKER",
+     ) -> Tuple[Order, Fill, Position]:
+         """
+         Executes simulated market fill based strictly on an approved RiskDecision.
+         Enforces Spot mode rejection for short positions.
++
++        FIX (2026-09, cost-drag reduction): `execution_style="MAKER"` simulates a
++        resting limit/post-only order filled exactly at the requested price
++        (self.maker_fee, zero adverse slippage) instead of a market/taker fill
++        (self.taker_fee, self.slippage_rate adverse move). This is a SIMPLIFIED
++        SIMULATION — real limit orders are not guaranteed to fill and can miss
++        moves entirely, so MAKER-mode backtest/paper results should be treated as
++        an optimistic upper bound until validated against real observed fill rates.
+         """
+         # 1. Verification of Risk Approval
+         if not decision or not decision.approved:
+@@ -576,15 +585,25 @@ class PaperExecutionEngine(ExecutionEngine):
+         side = OrderSide.BUY if decision.direction == SignalDirection.LONG else OrderSide.SELL
+         pos_side = PositionSide.LONG if decision.direction == SignalDirection.LONG else PositionSide.SHORT
+ 
+-        # Realistic Slippage modeling
++        # Realistic Slippage & Fee modeling
+         base_price = decision.entry_price
+-        slippage_mult = (1.0 + self.slippage_rate) if side == OrderSide.BUY else (1.0 - self.slippage_rate)
+-        exec_price = round(base_price * slippage_mult, 4 if base_price < 10 else 2)
+-        slippage_cost = round(abs(exec_price - base_price) * decision.calculated_size, 4)
++        is_maker = execution_style.upper() == "MAKER"
++
++        if is_maker:
++            # Resting limit/post-only fill: assumed filled exactly at requested price,
++            # no adverse slippage modeled (see docstring caveat above).
++            exec_price = round(base_price, 4 if base_price < 10 else 2)
++            slippage_cost = 0.0
++            fee_rate = self.maker_fee
++        else:
++            slippage_mult = (1.0 + self.slippage_rate) if side == OrderSide.BUY else (1.0 - self.slippage_rate)
++            exec_price = round(base_price * slippage_mult, 4 if base_price < 10 else 2)
++            slippage_cost = round(abs(exec_price - base_price) * decision.calculated_size, 4)
++            fee_rate = self.taker_fee
+ 
+-        # Taker Fee
++        # Fee (maker or taker, depending on execution_style)
+         notional = exec_price * decision.calculated_size
+-        fee = round(notional * self.taker_fee, 4)
++        fee = round(notional * fee_rate, 4)
+ 
+         # Available Balance Check
+         if side == OrderSide.BUY and notional + fee > self.available_balance:
+diff --git a/services/strategy_engine/strategies/r10_rsi_divergence.py b/services/strategy_engine/strategies/r10_rsi_divergence.py
+index 80171ff..0d9e97a 100644
+--- a/services/strategy_engine/strategies/r10_rsi_divergence.py
++++ b/services/strategy_engine/strategies/r10_rsi_divergence.py
+@@ -306,7 +306,8 @@ class R10RSIDivergenceStrategy(BaseStrategy):
+         if not (is_bull_div or is_bear_div):
+             return None
+ 
+-        signal_score = min(100.0, div_score * 0.6 + 40.0)
++        # Scale 10.0 - 20.0 divergence score range to 50.0 - 100.0
++        signal_score = min(100.0, max(50.0, 50.0 + (div_score - 10.0) * 5.0))
+         if signal_score < self.min_signal_score:
+             return None
+ 
+@@ -353,3 +354,29 @@ class R10RSIDivergenceStrategy(BaseStrategy):
+             )
+ 
+         return None
++
++
++def create_r10_strategy_from_settings(settings: Optional[object] = None) -> "R10RSIDivergenceStrategy":
++    """
++    SINGLE SOURCE OF TRUTH factory for R10RSIDivergenceStrategy.
++
++    FIX (2026-09): Previously, `autonomous_runner.py`, `market.py`, `signals.py` and
++    `strategy_manager.py` each instantiated `R10RSIDivergenceStrategy()` independently —
++    the live bot read `.env`/settings, but the API routers and the strategy registry
++    silently used the class's hardcoded defaults. If `.env` was ever changed, those
++    three call sites would keep using stale values without any error.
++
++    All call sites must now use this factory instead of calling the class directly,
++    so a single `.env` change is guaranteed to propagate everywhere.
++    """
++    if settings is None:
++        from shared.config import get_settings
++
++        settings = get_settings()
++
++    return R10RSIDivergenceStrategy(
++        left_bars=settings.R10_PIVOT_LEFT,
++        right_bars=settings.R10_PIVOT_RIGHT,
++        min_signal_score=settings.MIN_SIGNAL_SCORE,
++        timeframe=settings.R10_TIMEFRAME,
++    )
+diff --git a/services/strategy_engine/strategy_manager.py b/services/strategy_engine/strategy_manager.py
+index 06f15ff..d574dc1 100644
+--- a/services/strategy_engine/strategy_manager.py
++++ b/services/strategy_engine/strategy_manager.py
+@@ -3,7 +3,8 @@ from typing import List, Optional
+ from services.signal_engine.scorer import SignalScorer
+ from services.strategy_engine.strategies.base_strategy import BaseStrategy
+ from services.strategy_engine.strategies.mean_reversion import MeanReversionStrategy
+-from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
++from services.strategy_engine.strategies.r10_rsi_divergence import create_r10_strategy_from_settings
++from services.strategy_engine.strategies.regime_gated_pullback import RegimeGatedPullbackStrategy
+ from services.strategy_engine.strategies.rsi_divergence import RSIDivergenceStrategy
+ from services.strategy_engine.strategies.trend_following import TrendFollowingStrategy
+ from shared.logging import get_logger
+@@ -21,7 +22,9 @@ class StrategyManager:
+                 TrendFollowingStrategy(),
+                 MeanReversionStrategy(),
+                 RSIDivergenceStrategy(),
+-                R10RSIDivergenceStrategy(),
++                # FIX (2026-09): settings-driven factory instead of class defaults
++                create_r10_strategy_from_settings(),
++                RegimeGatedPullbackStrategy(),
+             ]
+ 
+     def register_strategy(self, strategy: BaseStrategy):
+diff --git a/shared/config/config.py b/shared/config/config.py
+index f4d3928..27f64fa 100644
+--- a/shared/config/config.py
++++ b/shared/config/config.py
+@@ -37,10 +37,24 @@ class Settings(BaseSettings):
+     LIVE_TRADING_ARMED: bool = False  # Step 2 of two-step activation
+ 
+     # API Security & Authentication (Section 27)
++    # FIX (2026-09): These two values are PUBLIC KNOWN DEFAULTS (they live in this
++    # open-source repo). They must NEVER be used as real credentials once
++    # API_KEY_AUTH_ENABLED=True — see the startup guard in get_settings() below,
++    # which refuses to boot if these are still in place while auth is enabled.
++    # Set real values via .env: API_AUTH_SECRET / API_ADMIN_KEY.
+     API_KEY_AUTH_ENABLED: bool = False  # Enable in production
+     API_AUTH_SECRET: str = "kripto-agent-secret-token"
+     API_ADMIN_KEY: str = "kripto-agent-admin-key"
+ 
++    # Execution Cost Model (Section 5 fix: R10's gross edge was positive but
++    # taker-fee + slippage roundtrip (~0.30%) erased it in strategy-discovery
++    # backtests -> NO-GO. MAKER mode simulates resting limit/post-only fills at
++    # the requested price with the existing MAKER_FEE and zero adverse slippage.
++    # CAVEAT: this is a simplified simulation — real limit orders are not
++    # guaranteed to fill, so treat MAKER-mode backtest results as optimistic
++    # until validated against real fill-rate data.)
++    EXECUTION_STYLE: str = "TAKER"  # "TAKER" or "MAKER"
++
+     # R10 RSI Divergence Configuration
+     R10_ENABLED: bool = True
+     R10_TIMEFRAME: str = "15m"
+@@ -107,6 +121,10 @@ class Settings(BaseSettings):
+     API_PORT: int = 8000
+ 
+ 
++_KNOWN_WEAK_AUTH_SECRET = "kripto-agent-secret-token"
++_KNOWN_WEAK_ADMIN_KEY = "kripto-agent-admin-key"
++
++
+ @lru_cache
+ def get_settings() -> Settings:
+     settings = Settings()
+@@ -115,4 +133,19 @@ def get_settings() -> Settings:
+         raise RuntimeError(
+             "CRITICAL SECURITY VIOLATION: LIVE_TRADING is True but LIVE_TRADING_ARMED is False (Two-step activation required)."
+         )
++
++    # FIX (2026-09, AUDIT finding): API_KEY_AUTH_ENABLED=True with the repo's known
++    # public default secrets would make auth trivially bypassable by anyone who
++    # has read this source code. Refuse to start rather than run "protected" in name
++    # only. Generate real values with, e.g.: python -c "import secrets; print(secrets.token_urlsafe(32))"
++    if settings.API_KEY_AUTH_ENABLED and (
++        settings.API_AUTH_SECRET == _KNOWN_WEAK_AUTH_SECRET
++        or settings.API_ADMIN_KEY == _KNOWN_WEAK_ADMIN_KEY
++    ):
++        raise RuntimeError(
++            "CRITICAL SECURITY VIOLATION: API_KEY_AUTH_ENABLED is True but API_AUTH_SECRET/"
++            "API_ADMIN_KEY are still the public default values from this repository. Set unique "
++            "secrets in .env before enabling auth (e.g. `python -c \"import secrets; "
++            "print(secrets.token_urlsafe(32))\"`)."
++        )
+     return settings

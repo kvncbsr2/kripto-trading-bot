@@ -1,3 +1,4 @@
+import secrets
 from enum import Enum
 from typing import Optional
 
@@ -35,7 +36,7 @@ async def verify_api_key_or_token(
     # 1. Check Bearer token
     if auth_cred and auth_cred.credentials:
         token = auth_cred.credentials.strip()
-        if token == settings.API_AUTH_SECRET or token == settings.API_ADMIN_KEY:
+        if any(secrets.compare_digest(token, expected) for expected in (settings.API_AUTH_SECRET, settings.API_ADMIN_KEY)):
             return Role.ADMIN
         logger.warning("Invalid Bearer token received.")
         raise HTTPException(
@@ -46,7 +47,7 @@ async def verify_api_key_or_token(
     # 2. Check X-API-KEY header
     if x_api_key:
         clean_key = x_api_key.strip()
-        if clean_key == settings.API_ADMIN_KEY or clean_key == settings.API_AUTH_SECRET:
+        if any(secrets.compare_digest(clean_key, expected) for expected in (settings.API_ADMIN_KEY, settings.API_AUTH_SECRET)):
             return Role.ADMIN
         logger.warning("Invalid X-API-KEY header received.")
         raise HTTPException(

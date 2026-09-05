@@ -25,6 +25,10 @@ class JudgeEvaluation(BaseModel):
     evaluation_summary: str
     actionable_directives: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    evaluator_engine: str = Field(
+        default="QUANTITATIVE_HEURISTIC_RULE_ENGINE",
+        description="Explicit attribution: QUANTITATIVE_HEURISTIC_RULE_ENGINE or EXTERNAL_LLM",
+    )
 
 
 class PerformanceJudgeAgent:
@@ -87,6 +91,7 @@ class PerformanceJudgeAgent:
             directives = data.get("actionable_directives", [])
             if isinstance(directives, str):
                 directives = [directives]
+            engine_label = getattr(self.llm, "engine_name", "EXTERNAL_LLM")
 
             return JudgeEvaluation(
                 regime=regime,
@@ -95,6 +100,7 @@ class PerformanceJudgeAgent:
                 evaluation_summary=data.get("evaluation_summary", "Evaluation complete."),
                 actionable_directives=directives,
                 metadata={"daily_pnl": daily_pnl, "win_rate": win_rate, "drawdown": max_drawdown_pct},
+                evaluator_engine=engine_label,
             )
 
         except Exception as e:
@@ -126,6 +132,7 @@ class PerformanceJudgeAgent:
                 evaluation_summary=summary,
                 actionable_directives=directives,
                 metadata={"rule_fallback": True, "daily_pnl": daily_pnl},
+                evaluator_engine="QUANTITATIVE_HEURISTIC_RULE_ENGINE",
             )
 
 

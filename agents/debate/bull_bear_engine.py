@@ -26,6 +26,10 @@ class DebateVerdict(BaseModel):
     synthesis: str
     risk_notes: List[str] = Field(default_factory=list)
     verdict_metadata: Dict[str, Any] = Field(default_factory=dict)
+    reasoning_engine: str = Field(
+        default="QUANTITATIVE_HEURISTIC_RULE_ENGINE",
+        description="Explicit engine attribution: QUANTITATIVE_HEURISTIC_RULE_ENGINE or EXTERNAL_LLM",
+    )
 
 
 class BullBearDebateEngine:
@@ -101,6 +105,7 @@ class BullBearDebateEngine:
 
             confidence = float(data.get("confidence", 0.5))
             confidence = max(0.0, min(1.0, confidence))
+            engine_label = getattr(self.llm, "engine_name", "EXTERNAL_LLM")
 
             return DebateVerdict(
                 direction=direction,
@@ -110,6 +115,7 @@ class BullBearDebateEngine:
                 synthesis=data.get("synthesis", "Consensus reached."),
                 risk_notes=[data.get("key_risk")] if data.get("key_risk") else [],
                 verdict_metadata={"raw_verdict": raw_verdict, "evidence": evidence},
+                reasoning_engine=engine_label,
             )
 
         except Exception as e:
@@ -162,4 +168,5 @@ class BullBearDebateEngine:
                 synthesis=f"Dialectic debate resolved {final_dir.value} with confidence {conf:.2f}.",
                 risk_notes=["Volatility monitoring active."],
                 verdict_metadata={"rule_based_fallback": True, "evidence": evidence},
+                reasoning_engine="QUANTITATIVE_HEURISTIC_RULE_ENGINE",
             )

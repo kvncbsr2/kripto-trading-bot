@@ -3,7 +3,8 @@ from typing import List, Optional
 from services.signal_engine.scorer import SignalScorer
 from services.strategy_engine.strategies.base_strategy import BaseStrategy
 from services.strategy_engine.strategies.mean_reversion import MeanReversionStrategy
-from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
+from services.strategy_engine.strategies.r10_rsi_divergence import create_r10_strategy_from_settings
+from services.strategy_engine.strategies.regime_gated_pullback import RegimeGatedPullbackStrategy
 from services.strategy_engine.strategies.rsi_divergence import RSIDivergenceStrategy
 from services.strategy_engine.strategies.trend_following import TrendFollowingStrategy
 from shared.logging import get_logger
@@ -21,7 +22,8 @@ class StrategyManager:
                 TrendFollowingStrategy(),
                 MeanReversionStrategy(),
                 RSIDivergenceStrategy(),
-                R10RSIDivergenceStrategy(),
+                create_r10_strategy_from_settings(),
+                RegimeGatedPullbackStrategy(),
             ]
 
     def register_strategy(self, strategy: BaseStrategy):

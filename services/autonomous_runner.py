@@ -10,7 +10,10 @@ from services.market_data.market_data_service import MarketDataService
 from services.notification_service.telegram_service import telegram_service
 from services.risk_engine.btc_regime_shield import btc_regime_shield
 from services.risk_engine.risk_engine import RiskEngine
-from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
+from services.strategy_engine.strategies.r10_rsi_divergence import (
+    R10RSIDivergenceStrategy,
+    create_r10_strategy_from_settings,
+)
 from shared.config import get_settings
 from shared.enums import PositionStatus, SignalDirection
 from shared.logging import add_system_log, get_logger
@@ -48,12 +51,7 @@ class AutonomousPaperTrader:
             risk_per_trade=settings.RISK_PER_TRADE,
             max_trades_per_day=settings.MAX_TRADES_PER_DAY,
         )
-        self.strategy = R10RSIDivergenceStrategy(
-            left_bars=settings.R10_PIVOT_LEFT,
-            right_bars=settings.R10_PIVOT_RIGHT,
-            min_signal_score=settings.MIN_SIGNAL_SCORE,
-            timeframe=settings.R10_TIMEFRAME,
-        )
+        self.strategy = create_r10_strategy_from_settings()
         self.feature_engine = FeatureEngine()
 
         # Requirement 4: Starts in OFF state by default
@@ -66,6 +64,10 @@ class AutonomousPaperTrader:
 
     def bind_command_bus(self, command_bus_instance):
         self.command_bus = command_bus_instance
+        if hasattr(command_bus_instance, "strategy_manager") and command_bus_instance.strategy_manager:
+            r10 = next((s for s in command_bus_instance.strategy_manager.strategies if s.name == "r10_rsi_divergence"), None)
+            if r10:
+                self.strategy = r10
 
     def bind_market_data_service(self, market_data_service: MarketDataService):
         self.market_data_service = market_data_service
@@ -178,6 +180,16 @@ class AutonomousPaperTrader:
             self._sync_runtime_state()
             return {"action": "MONITORING_MAX_CAPACITY", "open_positions": open_count}
 
+        if not getattr(self.strategy, "enabled", True):
+            self.last_action = f"Strateji ({self.strategy.name}) devre dışı. Sadece açık pozisyonlar izleniyor."
+            add_system_log(
+                f"⏸️ Strateji ({self.strategy.name}) devre dışı. Yeni sinyal taranmıyor, mevcut {open_count} pozisyon izleniyor.",
+                level="INFO",
+                service="runner",
+            )
+            self._sync_runtime_state()
+            return {"action": "STRATEGY_DISABLED", "open_positions": open_count}
+
         # ---------------------------------------------------------------------
         # 2.1 Evaluate BTC Trend Shield (Regime Filter)
         # ---------------------------------------------------------------------
@@ -210,7 +222,8 @@ class AutonomousPaperTrader:
                     if not can_trade:
                         return {"symbol": sym, "status": "shield_blocked", "reason": shield_msg}
 
-                    candles = await mds.get_historical_klines(sym, timeframe="15m", limit=100)
+                    scan_timeframe = getattr(self.strategy, "timeframe", None) or settings.R10_TIMEFRAME
+                    candles = await mds.get_historical_klines(sym, timeframe=scan_timeframe, limit=100)
                     if not candles or len(candles) < 30:
                         return {"symbol": sym, "status": "insufficient_data"}
 

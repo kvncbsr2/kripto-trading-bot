@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -20,7 +20,7 @@ async def test_dynamic_screener_filters_stablecoins_and_volume():
     ]
 
     with patch("httpx.AsyncClient.get") as mock_get:
-        mock_resp = AsyncMock()
+        mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = mock_binance_data
         mock_get.return_value = mock_resp
@@ -41,12 +41,9 @@ async def test_dynamic_screener_filters_stablecoins_and_volume():
 
 
 @pytest.mark.asyncio
-async def test_dynamic_screener_fallback_on_network_error():
+async def test_dynamic_screener_fails_closed_on_network_error():
     screener = DynamicUniverseScreener()
 
     with patch("httpx.AsyncClient.get", side_effect=Exception("Binance Network Timeout")):
         universe = await screener.get_liquid_universe()
-        # Fallback to high-quality default universe without crashing
-        assert len(universe) > 0
-        assert "BTC/USDT" in universe
-        assert "ETH/USDT" in universe
+        assert universe == []

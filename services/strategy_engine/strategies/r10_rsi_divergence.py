@@ -8,6 +8,7 @@ import pandas as pd
 from services.feature_engine.indicators.momentum import calculate_rsi
 from services.feature_engine.volatility.volatility import calculate_atr
 from services.strategy_engine.strategies.base_strategy import BaseStrategy
+from shared.config import get_settings
 from shared.enums import MarketRegime, SignalDirection
 from shared.logging import get_logger
 from shared.schemas import FeatureVector, MarketRegimeState, Signal
@@ -53,6 +54,11 @@ class R10RSIDivergenceStrategy(BaseStrategy):
         self.risk_reward_ratio = risk_reward_ratio
         self.min_signal_score = min_signal_score
         self.timeframe = timeframe
+
+    @staticmethod
+    def calculate_signal_score_from_divergence(div_score: float) -> float:
+        """Map divergence score 10..20 monotonically to 50..100."""
+        return min(100.0, max(50.0, 50.0 + (div_score - 10.0) * 5.0))
 
     def detect_pivots_strictly_causal(
         self,
@@ -202,7 +208,7 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                     quality = self.calculate_divergence_quality(
                         p1, p2, current_atr, is_bullish=True
                     )
-                    signal_score = min(100.0, quality * 0.7 + 25.0)
+                    signal_score = min(100.0, max(0.0, quality * 0.7 + 25.0))
 
                     if signal_score >= self.min_signal_score:
                         stop_loss = round(p2.price - (current_atr * self.atr_multiplier), 2)
@@ -246,7 +252,7 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                     quality = self.calculate_divergence_quality(
                         p1, p2, current_atr, is_bullish=False
                     )
-                    signal_score = min(100.0, quality * 0.7 + 25.0)
+                    signal_score = min(100.0, max(0.0, quality * 0.7 + 25.0))
 
                     if signal_score >= self.min_signal_score:
                         stop_loss = round(p2.price + (current_atr * self.atr_multiplier), 2)
@@ -306,7 +312,8 @@ class R10RSIDivergenceStrategy(BaseStrategy):
         if not (is_bull_div or is_bear_div):
             return None
 
-        signal_score = min(100.0, div_score * 0.6 + 40.0)
+        # Scale 10.0 - 20.0 divergence score range to 50.0 - 100.0
+        signal_score = self.calculate_signal_score_from_divergence(div_score)
         if signal_score < self.min_signal_score:
             return None
 
@@ -353,3 +360,19 @@ class R10RSIDivergenceStrategy(BaseStrategy):
             )
 
         return None
+
+
+def create_r10_strategy_from_settings(settings: Optional[object] = None) -> R10RSIDivergenceStrategy:
+    """Build the single canonical R10 strategy from application settings."""
+    if settings is None:
+        settings = get_settings()
+    return R10RSIDivergenceStrategy(
+        rsi_length=settings.R10_RSI_LENGTH,
+        left_bars=settings.R10_PIVOT_LEFT,
+        right_bars=settings.R10_PIVOT_RIGHT,
+        atr_multiplier=settings.ATR_SL_MULTIPLIER,
+        risk_reward_ratio=settings.PREFERRED_RISK_REWARD,
+        min_signal_score=settings.MIN_SIGNAL_SCORE,
+        timeframe=settings.R10_TIMEFRAME,
+        enabled=settings.R10_ENABLED,
+    )

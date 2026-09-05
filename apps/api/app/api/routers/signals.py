@@ -7,13 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.app.api.state import RUNTIME_STATE, market_data_service, risk_engine
+from apps.api.app.middleware.auth import Role, verify_api_key_or_token
 from database.models.tables import SignalModel
 from database.session import get_async_db
-from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
+from services.strategy_engine.strategies.r10_rsi_divergence import create_r10_strategy_from_settings
 from shared.enums import SignalDirection
 
 router = APIRouter(tags=["signals"])
-r10_strategy = R10RSIDivergenceStrategy()
+r10_strategy = create_r10_strategy_from_settings()
 
 
 class GenerateSignalRequest(BaseModel):
@@ -56,7 +57,10 @@ async def get_active_signals():
 
 
 @router.post("/signals/generate")
-async def post_generate_signal(payload: GenerateSignalRequest):
+async def post_generate_signal(
+    payload: GenerateSignalRequest,
+    _role: Role = Depends(verify_api_key_or_token),
+):
     """
     Evaluates real market candles for candidate symbol and generates strictly causal signal.
     """

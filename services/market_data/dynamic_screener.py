@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 
 import httpx
 
+from shared.config import get_settings
 from shared.logging import get_logger
 
 logger = get_logger("dynamic-screener", service="scanner")
@@ -43,6 +44,7 @@ class DynamicUniverseScreener:
         self.min_volume_usd = min_volume_usd
         self.max_symbols = max_symbols
         self.cache_ttl_seconds = cache_ttl_seconds
+        self.settings = get_settings()
         self._cached_symbols: List[str] = []
         self._last_screen_time: float = 0.0
 
@@ -57,7 +59,7 @@ class DynamicUniverseScreener:
                 resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
                 if resp.status_code != 200:
                     logger.warning(f"Binance 24hr ticker query failed (status {resp.status_code}). Using fallback universe.")
-                    return self._fallback_universe()
+                    return []
 
                 data = resp.json()
 
@@ -82,7 +84,7 @@ class DynamicUniverseScreener:
 
                 spread = ask - bid
                 spread_bps = (spread / ask) * 10000.0
-                if spread_bps > 20.0:  # Exclude wide spreads > 20 bps
+                if spread_bps > self.settings.MAX_SPREAD_BPS:  # Exclude wide spreads > settings.MAX_SPREAD_BPS
                     continue
 
                 price_change = float(item.get("priceChangePercent") or 0.0)
@@ -115,7 +117,7 @@ class DynamicUniverseScreener:
 
         except Exception as e:
             logger.error(f"Error screening Binance universe: {e}. Using fallback universe.")
-            return self._fallback_universe()
+            return []
 
     def _fallback_universe(self) -> List[str]:
         if not self._cached_symbols:

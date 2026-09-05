@@ -3,11 +3,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 import apps.api.app.api.state as app_state
 from apps.api.app.api.state import market_data_service
+from apps.api.app.middleware.auth import Role, verify_api_key_or_token
 from services.backtest_engine.replay_engine import CausalHistoricalReplayEngine
 from services.backtest_engine.vbt_backtest import VectorBTBacktester
 from services.feature_engine.indicators.momentum import calculate_rsi
@@ -33,7 +34,10 @@ class BacktestRunRequest(BaseModel):
 @router.post("/backtest/run")
 @router.post("/api/v1/backtest/run")
 @router.post("/api/backtest/run")
-async def post_run_backtest(payload: BacktestRunRequest):
+async def post_run_backtest(
+    payload: BacktestRunRequest,
+    _role: Role = Depends(verify_api_key_or_token),
+):
     """
     Executes VectorBT backtest on REAL Binance historical candle data.
     Maps timeframe dynamically. Zero synthetic price injection.
@@ -111,7 +115,10 @@ async def get_backtest_compare():
 
 
 @router.post("/api/v1/r10/replay")
-async def post_run_r10_replay(symbol: str = "BTC/USDT"):
+async def post_run_r10_replay(
+    symbol: str = "BTC/USDT",
+    _role: Role = Depends(verify_api_key_or_token),
+):
     """
     Executes Causal Historical Replay Engine:
     Fetches real historical Binance 1D candles and replays bar-by-bar with zero lookahead.

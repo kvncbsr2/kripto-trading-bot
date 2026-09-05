@@ -13,6 +13,7 @@ from shared.enums import (
     PositionStatus,
     SignalDirection,
 )
+from shared.config import get_settings
 from shared.logging import get_logger
 from shared.schemas import Fill, Order, Position, RiskDecision
 
@@ -145,6 +146,7 @@ class OrderManager:
                     decision=decision,
                     strategy_name=strategy_name,
                     order_id=order_id,
+                    execution_style=get_settings().EXECUTION_STYLE,
                 )
             else:
                 exec_order, fill, pos = await self.execution_engine.submit_order(

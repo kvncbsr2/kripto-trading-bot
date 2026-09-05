@@ -4,12 +4,12 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.api.app.api.state import command_bus, market_data_service
-from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
+from services.strategy_engine.strategies.r10_rsi_divergence import create_r10_strategy_from_settings
 from shared.config import get_settings
 
 router = APIRouter(tags=["market"])
 settings = get_settings()
-r10_strategy = R10RSIDivergenceStrategy()
+r10_strategy = create_r10_strategy_from_settings()
 
 
 @router.get("/market/status")
