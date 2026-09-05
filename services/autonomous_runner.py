@@ -213,7 +213,7 @@ class AutonomousPaperTrader:
             service="runner"
         )
 
-        scan_sem = asyncio.Semaphore(10)
+        scan_sem = asyncio.Semaphore(25)
 
         async def _scan_single_symbol(sym: str):
             async with scan_sem:
@@ -279,8 +279,9 @@ class AutonomousPaperTrader:
 
             for sym, sig, candle_ts, last_p in confirmed_signals:
                 sig_price = getattr(sig, "entry_price", last_p)
+                price_str = f"${sig_price:,.4f}" if sig_price < 1.0 else f"${sig_price:,.2f}"
                 add_system_log(
-                    f"🎯 {sym}: R10 {sig.direction.value} SİNYALİ TESPİT EDİLDİ! Fiyat: ${sig_price:,.2f} | Güven: {sig.confidence:.2f} | {sig.reason}",
+                    f"🎯 {sym}: R10 {sig.direction.value} SİNYALİ TESPİT EDİLDİ! Fiyat: {price_str} | Güven: {sig.confidence:.2f} | {sig.reason}",
                     level="SUCCESS",
                     service="strategy"
                 )
@@ -305,7 +306,7 @@ class AutonomousPaperTrader:
                 decision = self.risk_engine.evaluate_signal(
                     signal=sig,
                     portfolio=portfolio_state,
-                    latest_market_time=candle_ts,
+                    latest_market_time=datetime.now(timezone.utc),
                 )
 
                 if decision.approved:

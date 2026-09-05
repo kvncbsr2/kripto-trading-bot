@@ -27,6 +27,20 @@ class ConfirmedPivot:
     confirmation_time: datetime
 
 
+def _format_price_precision(price: float) -> float:
+    if price <= 0:
+        return 0.0
+    if price < 0.0001:
+        return round(price, 8)
+    if price < 0.01:
+        return round(price, 6)
+    if price < 1.0:
+        return round(price, 4)
+    if price < 10.0:
+        return round(price, 3)
+    return round(price, 2)
+
+
 class R10RSIDivergenceStrategy(BaseStrategy):
     """
     R10 RSI Divergence Swing Strategy with Strict Causal Anti-Lookahead Guarantee.
@@ -211,11 +225,11 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                     signal_score = min(100.0, max(0.0, quality * 0.7 + 25.0))
 
                     if signal_score >= self.min_signal_score:
-                        stop_loss = round(p2.price - (current_atr * self.atr_multiplier), 2)
+                        stop_loss = _format_price_precision(p2.price - (current_atr * self.atr_multiplier))
                         risk_dist = current_price - stop_loss
                         if risk_dist > 0:
-                            take_profit = round(
-                                current_price + (risk_dist * self.risk_reward_ratio), 2
+                            take_profit = _format_price_precision(
+                                current_price + (risk_dist * self.risk_reward_ratio)
                             )
                             return Signal(
                                 symbol=symbol,
@@ -227,7 +241,7 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                                 take_profit=take_profit,
                                 confidence=round(signal_score / 100.0, 2),
                                 regime=MarketRegime.BULL_TREND,
-                                reason=f"R10 Bullish Divergence (P1={p1.price:.2f} P2={p2.price:.2f}, RSI1={p1.rsi:.1f} RSI2={p2.rsi:.1f})",
+                                reason=f"R10 Bullish Divergence (P1={_format_price_precision(p1.price)} P2={_format_price_precision(p2.price)}, RSI1={p1.rsi:.1f} RSI2={p2.rsi:.1f})",
                                 metadata={
                                     "strategy_family": "R10_DIVERGENCE",
                                     "divergence_type": "REGULAR_BULLISH",
@@ -255,11 +269,11 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                     signal_score = min(100.0, max(0.0, quality * 0.7 + 25.0))
 
                     if signal_score >= self.min_signal_score:
-                        stop_loss = round(p2.price + (current_atr * self.atr_multiplier), 2)
+                        stop_loss = _format_price_precision(p2.price + (current_atr * self.atr_multiplier))
                         risk_dist = stop_loss - current_price
                         if risk_dist > 0:
-                            take_profit = round(
-                                current_price - (risk_dist * self.risk_reward_ratio), 2
+                            take_profit = _format_price_precision(
+                                current_price - (risk_dist * self.risk_reward_ratio)
                             )
                             return Signal(
                                 symbol=symbol,
@@ -271,7 +285,7 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                                 take_profit=take_profit,
                                 confidence=round(signal_score / 100.0, 2),
                                 regime=MarketRegime.BEAR_TREND,
-                                reason=f"R10 Bearish Divergence (P1={p1.price:.2f} P2={p2.price:.2f}, RSI1={p1.rsi:.1f} RSI2={p2.rsi:.1f})",
+                                reason=f"R10 Bearish Divergence (P1={_format_price_precision(p1.price)} P2={_format_price_precision(p2.price)}, RSI1={p1.rsi:.1f} RSI2={p2.rsi:.1f})",
                                 metadata={
                                     "strategy_family": "R10_DIVERGENCE",
                                     "divergence_type": "REGULAR_BEARISH",
@@ -318,8 +332,8 @@ class R10RSIDivergenceStrategy(BaseStrategy):
             return None
 
         if is_bull_div:
-            stop_loss = round(close - (atr * self.atr_multiplier), 2)
-            take_profit = round(close + ((close - stop_loss) * self.risk_reward_ratio), 2)
+            stop_loss = _format_price_precision(close - (atr * self.atr_multiplier))
+            take_profit = _format_price_precision(close + ((close - stop_loss) * self.risk_reward_ratio))
             return Signal(
                 symbol=features.symbol,
                 timestamp=features.timestamp,
@@ -339,8 +353,8 @@ class R10RSIDivergenceStrategy(BaseStrategy):
             )
 
         if is_bear_div:
-            stop_loss = round(close + (atr * self.atr_multiplier), 2)
-            take_profit = round(close - ((stop_loss - close) * self.risk_reward_ratio), 2)
+            stop_loss = _format_price_precision(close + (atr * self.atr_multiplier))
+            take_profit = _format_price_precision(close - ((stop_loss - close) * self.risk_reward_ratio))
             return Signal(
                 symbol=features.symbol,
                 timestamp=features.timestamp,

@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -37,14 +37,22 @@ class DynamicUniverseScreener:
 
     def __init__(
         self,
-        min_volume_usd: float = 10000000.0,
-        max_symbols: int = 50,
+        min_volume_usd: Optional[float] = None,
+        max_symbols: Optional[int] = None,
         cache_ttl_seconds: float = 600.0,
     ):
-        self.min_volume_usd = min_volume_usd
-        self.max_symbols = max_symbols
-        self.cache_ttl_seconds = cache_ttl_seconds
         self.settings = get_settings()
+        self.min_volume_usd = (
+            min_volume_usd
+            if min_volume_usd is not None
+            else getattr(self.settings, "MIN_24H_VOLUME_USDT", 500000.0)
+        )
+        self.max_symbols = (
+            max_symbols
+            if max_symbols is not None
+            else getattr(self.settings, "MAX_UNIVERSE_SYMBOLS", 200)
+        )
+        self.cache_ttl_seconds = cache_ttl_seconds
         self._cached_symbols: List[str] = []
         self._last_screen_time: float = 0.0
 

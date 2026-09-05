@@ -80,22 +80,42 @@ class SymbolFilterEngine:
         Validates minQty, maxQty, and minNotional.
         Returns (is_valid, reason, normalized_price, normalized_quantity).
         """
-        spec = self.filters.get(symbol, {
-            "min_qty": 0.0001,
-            "max_qty": 100000.0,
-            "step_size": 0.0001,
-            "tick_size": 0.01,
-            "min_notional": 5.0,
-        })
+        spec = self.filters.get(symbol)
+        if not spec:
+            # Dynamic fallback filter based on price magnitude
+            if price >= 100.0:
+                tick_size = 0.01
+                step_size = 0.0001
+                max_qty = 1000000.0
+            elif price >= 1.0:
+                tick_size = 0.001
+                step_size = 0.01
+                max_qty = 10000000.0
+            elif price >= 0.01:
+                tick_size = 0.0001
+                step_size = 0.1
+                max_qty = 100000000.0
+            else:
+                tick_size = 0.000001
+                step_size = 1.0
+                max_qty = 1000000000.0
+
+            spec = {
+                "min_qty": step_size,
+                "max_qty": max_qty,
+                "step_size": step_size,
+                "tick_size": tick_size,
+                "min_notional": 5.0,
+            }
 
         norm_qty = self.round_to_step_size(quantity, spec["step_size"])
         norm_price = self.round_to_tick_size(price, spec["tick_size"])
 
+        if norm_qty > spec["max_qty"]:
+            norm_qty = spec["max_qty"]
+
         if norm_qty < spec["min_qty"]:
             return False, f"Quantity {norm_qty} below minQty {spec['min_qty']}", norm_price, norm_qty
-
-        if norm_qty > spec["max_qty"]:
-            return False, f"Quantity {norm_qty} exceeds maxQty {spec['max_qty']}", norm_price, norm_qty
 
         notional = norm_price * norm_qty
         if notional < spec["min_notional"]:

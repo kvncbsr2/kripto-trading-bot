@@ -84,7 +84,8 @@ class Settings(BaseSettings):
     TAKER_FEE: float = 0.001  # 0.1%
     SLIPPAGE_BPS: float = 5.0  # 5 bps
     MAX_SPREAD_BPS: float = 15.0  # Max spread 15 bps
-    MIN_24H_VOLUME_USDT: float = 10000000.0  # Min $10M 24h volume
+    MIN_24H_VOLUME_USDT: float = 500000.0  # Min $500K 24h volume
+    MAX_UNIVERSE_SYMBOLS: int = 200  # Top 200 Binance crypto universe
     BINANCE_ENVIRONMENT: str = "production_market_data"
     BINANCE_ENV: str = "production_market_data"
 
