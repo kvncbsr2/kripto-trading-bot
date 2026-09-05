@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,9 @@ from apps.api.app.api.state import command_bus, market_data_service
 from apps.api.app.middleware.auth import Role, verify_api_key_or_token
 from database.models.tables import PositionModel
 from database.session import get_async_db
+from shared.logging import get_logger
+
+logger = get_logger("positions-router", service="api")
 
 router = APIRouter(tags=["positions"])
 
@@ -21,12 +24,13 @@ class ClosePositionRequest(BaseModel):
 @router.get("/positions")
 @router.get("/api/v1/positions")
 @router.get("/api/v1/positions/active")
-async def get_positions(status: str = "OPEN", db: AsyncSession = Depends(get_async_db)):
+async def get_positions(status: str = "OPEN", response: Response = None, db: AsyncSession = Depends(get_async_db)):
     """
     Returns active or historical positions from DB and authoritative PaperBroker.
     Strictly Zero Fake Data: Returns empty list if no positions exist.
     """
     positions = []
+    db_query_ok = True
     try:
         stmt = select(PositionModel)
         if status.upper() != "ALL":
@@ -34,8 +38,18 @@ async def get_positions(status: str = "OPEN", db: AsyncSession = Depends(get_asy
         stmt = stmt.order_by(PositionModel.created_at.desc())
         res = await db.execute(stmt)
         positions = list(res.scalars().all())
-    except Exception:
-        pass
+    except Exception as e:
+        # FIX (2026-09): previously a bare `except: pass` silently returned an empty
+        # list on ANY database error, indistinguishable from "genuinely zero
+        # positions" — a direct contradiction of the "Zero Fake Data" docstring
+        # above, since an empty-because-broken response looks identical to an
+        # empty-because-true one. We still don't hard-fail the endpoint (the
+        # in-memory PaperBroker positions merged in below are the authoritative
+        # real-time source and can stand on their own), but the failure is now
+        # logged loudly and surfaced via `db_query_error` in the response so a
+        # caller can tell the difference.
+        logger.error(f"get_positions: DB query failed, falling back to in-memory broker only: {e}", exc_info=True)
+        db_query_ok = False
 
     pos_list = [
         {
@@ -77,6 +91,9 @@ async def get_positions(status: str = "OPEN", db: AsyncSession = Depends(get_asy
                     "opened_at": p.opened_at.isoformat() if hasattr(p.opened_at, "isoformat") else str(p.opened_at),
                     "closed_at": None,
                 })
+
+    if not db_query_ok and response is not None:
+        response.headers["X-DB-Query-Error"] = "true"
 
     return pos_list
 

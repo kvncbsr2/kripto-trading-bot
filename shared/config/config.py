@@ -56,11 +56,16 @@ class Settings(BaseSettings):
     API_ADMIN_KEY: str = secrets.token_urlsafe(32)
 
     # R10 RSI Divergence Configuration
+    # REVERTED (2026-09): was loosened to 15m/pivot-3 to chase more signal frequency
+    # after the 200-coin universe expansion, but this directly undoes the earlier
+    # cost-drag finding: 15m round-trip cost (~0.30%) already ate the edge at the
+    # STRICTER settings, so more/weaker signals on the same timeframe makes that
+    # worse, not better. Reverted to the values that were actually backtested.
     R10_ENABLED: bool = True
-    R10_TIMEFRAME: str = "15m"
+    R10_TIMEFRAME: str = "1h"
     R10_RSI_LENGTH: int = 14
-    R10_PIVOT_LEFT: int = 3
-    R10_PIVOT_RIGHT: int = 3
+    R10_PIVOT_LEFT: int = 5
+    R10_PIVOT_RIGHT: int = 5
     R10_CONFIRMATION_ENABLED: bool = True
 
     # V2 7-Day $5,000 Experiment Configuration
@@ -93,8 +98,11 @@ class Settings(BaseSettings):
     ATR_SL_MULTIPLIER: float = 1.5
     MIN_RISK_REWARD: float = 1.5
     PREFERRED_RISK_REWARD: float = 2.0
-    MIN_SIGNAL_SCORE: float = 60.0
-    MIN_OPPORTUNITY_SCORE: float = 40.0
+    # REVERTED (2026-09): loosened 70->60 / 50->40 to chase more signal frequency;
+    # reverted to the stricter thresholds actually backtested. Widen the 200-coin
+    # universe for more CANDIDATE opportunities, not a lower bar for entry.
+    MIN_SIGNAL_SCORE: float = 70.0
+    MIN_OPPORTUNITY_SCORE: float = 50.0
 
     # Market Universe
     DEFAULT_SYMBOLS: list[str] = [

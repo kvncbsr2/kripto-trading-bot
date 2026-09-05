@@ -111,8 +111,14 @@ class SymbolFilterEngine:
         norm_qty = self.round_to_step_size(quantity, spec["step_size"])
         norm_price = self.round_to_tick_size(price, spec["tick_size"])
 
+        # FIX (2026-09): previously silently clamped norm_qty down to max_qty and
+        # kept going. Directionally that's risk-reducing (smaller size), but it means
+        # the order actually sent no longer matches what RiskEngine calculated for
+        # position sizing — a silent deviation with no record of it happening. Reject
+        # instead, exactly like the minQty case below, so the caller (and logs) see
+        # a clear reason rather than a silently different order.
         if norm_qty > spec["max_qty"]:
-            norm_qty = spec["max_qty"]
+            return False, f"Quantity {norm_qty} exceeds maxQty {spec['max_qty']}", norm_price, norm_qty
 
         if norm_qty < spec["min_qty"]:
             return False, f"Quantity {norm_qty} below minQty {spec['min_qty']}", norm_price, norm_qty
