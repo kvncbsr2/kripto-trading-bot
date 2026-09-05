@@ -1,9 +1,10 @@
 import pytest
+
 from services.execution.order_manager import OrderManager
 from services.execution.paper_execution import PaperExecutionEngine
 from services.risk_engine.risk_engine import RiskEngine
 from shared.enums import SignalDirection
-from shared.schemas import RiskDecision, Signal
+from shared.schemas import RiskDecision
 
 
 @pytest.mark.asyncio

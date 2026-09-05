@@ -1,7 +1,7 @@
-from collections import deque
 import json
 import logging
 import sys
+from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 

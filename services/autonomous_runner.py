@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
@@ -14,7 +14,6 @@ from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDiverge
 from shared.config import get_settings
 from shared.enums import PositionStatus, SignalDirection
 from shared.logging import add_system_log, get_logger
-from shared.schemas import Candle, Signal
 
 logger = get_logger("autonomous-trader", service="autonomous_trader")
 settings = get_settings()

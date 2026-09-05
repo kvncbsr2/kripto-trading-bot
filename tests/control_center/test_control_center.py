@@ -111,10 +111,11 @@ async def test_scanner_run_action(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_vectorbt_backtest_endpoint(client: AsyncClient):
+    from datetime import datetime, timedelta, timezone
     from unittest.mock import AsyncMock, patch
-    from datetime import datetime, timezone, timedelta
-    from shared.schemas import Candle
+
     from shared.enums import Timeframe
+    from shared.schemas import Candle
 
     base_time = datetime.now(timezone.utc)
     mock_candles = [

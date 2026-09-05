@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from services.risk_engine.circuit_breaker import CircuitBreaker, CircuitState
 from services.risk_engine.risk_engine import RiskEngine
 from shared.enums import SignalDirection

@@ -1,4 +1,3 @@
-import pytest
 
 from services.binance_connector.connector import BinanceConnector, ConnectionState
 from services.market_data.market_data_service import MarketDataService

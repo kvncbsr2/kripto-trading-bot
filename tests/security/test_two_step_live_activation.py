@@ -1,12 +1,10 @@
 import pytest
 
 from services.execution.live_binance_execution import BinanceLiveExecutionEngine
-from shared.config import get_settings
 
 
 def test_live_execution_engine_rejects_when_not_armed():
     """Verifies that live execution engine refuses initialization when disarmed (AUDIT-13)."""
-    settings = get_settings()
 
     # Even if someone attempts to pass credentials, without live_trading AND armed it must fail
     with pytest.raises(RuntimeError) as exc:

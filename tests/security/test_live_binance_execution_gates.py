@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from services.execution.live_binance_execution import BinanceLiveExecutionEngine
 from shared.config import get_settings
 from shared.enums import SignalDirection

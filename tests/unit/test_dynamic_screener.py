@@ -1,12 +1,14 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
-from services.market_data.dynamic_screener import DynamicUniverseScreener, FALLBACK_SYMBOLS
+
+from services.market_data.dynamic_screener import DynamicUniverseScreener
 
 
 @pytest.mark.asyncio
 async def test_dynamic_screener_filters_stablecoins_and_volume():
     screener = DynamicUniverseScreener(min_volume_usd=10000000.0, max_symbols=10)
-    
+
     mock_binance_data = [
         {"symbol": "BTCUSDT", "quoteVolume": "100000000.0", "bidPrice": "80000", "askPrice": "80001", "priceChangePercent": "-2.0"},
         {"symbol": "ETHUSDT", "quoteVolume": "50000000.0", "bidPrice": "2500", "askPrice": "2500.5", "priceChangePercent": "-1.5"},
@@ -24,13 +26,13 @@ async def test_dynamic_screener_filters_stablecoins_and_volume():
         mock_get.return_value = mock_resp
 
         universe = await screener.get_liquid_universe()
-        
+
         # Invariants:
         assert "BTC/USDT" in universe
         assert "ETH/USDT" in universe
         assert "SOL/USDT" in universe
         assert "DOGE/USDT" in universe
-        
+
         # Stablecoins and leveraged tokens must NEVER enter trading universe
         assert "USDC/USDT" not in universe
         assert "USDCUSDT/USDT" not in universe

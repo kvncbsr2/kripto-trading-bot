@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta, timezone
-import numpy as np
+
 import pandas as pd
-import pytest
 
 from services.backtest_engine.anti_lookahead import AntiLookaheadEngine
 from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy

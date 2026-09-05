@@ -1,4 +1,3 @@
-import pytest
 
 from services.execution.symbol_filters import SymbolFilterEngine
 

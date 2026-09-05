@@ -9,6 +9,7 @@ to preserve capital and avoid catastrophic drawdowns.
 
 import json
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 from core.llm.llm_provider import BaseLLMProvider, get_llm_provider

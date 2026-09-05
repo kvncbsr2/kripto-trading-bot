@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from services.execution.paper_execution import PaperExecutionEngine
 from shared.enums import PositionSide, PositionStatus
 from shared.schemas import Position

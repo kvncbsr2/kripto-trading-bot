@@ -1,7 +1,6 @@
 import asyncio
 import signal
 import sys
-from datetime import datetime, timezone
 
 from database.init_db import init_models_async
 from services.autonomous_runner import AutonomousPaperTrader

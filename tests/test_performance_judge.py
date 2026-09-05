@@ -1,6 +1,7 @@
 import pytest
+
+from agents.judge.performance_judge import JudgeEvaluation, PerformanceJudgeAgent
 from core.llm.llm_provider import HeuristicFallbackProvider
-from agents.judge.performance_judge import PerformanceJudgeAgent, JudgeEvaluation
 
 
 @pytest.mark.asyncio

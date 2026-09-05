@@ -1,20 +1,19 @@
-import pytest
-import math
-from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock
 
-from services.execution.paper_execution import PaperExecutionEngine
+import pytest
+
 from services.execution.live_binance_execution import BinanceLiveExecutionEngine
 from services.execution.order_manager import OrderManager
-from services.execution.symbol_filters import symbol_filter_engine
+from services.execution.paper_execution import PaperExecutionEngine
 from services.execution.reconciliation import ReconciliationEngine
-from services.risk_engine.risk_engine import RiskEngine
-from services.risk_engine.circuit_breaker import CircuitBreaker
+from services.execution.symbol_filters import symbol_filter_engine
 from services.market_data.data_quality import DataQualityEngine
+from services.risk_engine.risk_engine import RiskEngine
 from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
 from shared.config import get_settings
-from shared.enums import SignalDirection, OrderSide, OrderStatus, MarketRegime, Timeframe
-from shared.schemas import Signal, RiskDecision, PortfolioState, Candle
+from shared.enums import MarketRegime, OrderStatus, SignalDirection, Timeframe
+from shared.schemas import Candle, PortfolioState, RiskDecision, Signal
 
 settings = get_settings()
 
@@ -28,7 +27,7 @@ async def test_i1_and_i20_paper_broker_zero_binance_network_call():
     engine = PaperExecutionEngine(initial_balance=5000.0)
     # Check engine has no ccxt or Binance REST client
     assert not hasattr(engine, "client") or engine.client is None
-    
+
     decision = RiskDecision(
         approved=True,
         symbol="BTC/USDT",
@@ -41,7 +40,7 @@ async def test_i1_and_i20_paper_broker_zero_binance_network_call():
         risk_reward_ratio=2.0,
         reason="Paper test",
     )
-    
+
     order, fill, pos = await engine.submit_order(decision, strategy_name="test")
     assert order.status == OrderStatus.FILLED
     assert fill.fee > 0.0  # Simulated fee deducted
@@ -73,7 +72,7 @@ async def test_i3_single_order_authority_protective_stop_invariant():
     om = OrderManager()
     engine = PaperExecutionEngine(initial_balance=5000.0)
     om.bind_execution_engine(engine)
-    
+
     # Decision with missing stop loss
     invalid_decision = RiskDecision(
         approved=True,
@@ -87,7 +86,7 @@ async def test_i3_single_order_authority_protective_stop_invariant():
         risk_reward_ratio=2.0,
         reason="Invalid zero stop",
     )
-    
+
     with pytest.raises(ValueError, match="PROTECTIVE_STOP_VIOLATION"):
         await om.execute_risk_decision(invalid_decision, strategy_name="test")
 
@@ -100,7 +99,7 @@ def test_i4_stale_market_data_rejection():
     risk = RiskEngine()
     now = datetime.now(timezone.utc)
     old_time = now - timedelta(seconds=250)  # 250s old > 180s stale_data_seconds
-    
+
     sig = Signal(
         symbol="BTC/USDT",
         timestamp=now,
@@ -113,7 +112,7 @@ def test_i4_stale_market_data_rejection():
         regime=MarketRegime.BULL_TREND,
         reason="Stale signal test",
     )
-    
+
     portfolio = PortfolioState(
         balance=5000.0,
         total_balance=5000.0,
@@ -121,7 +120,7 @@ def test_i4_stale_market_data_rejection():
         open_positions=[],
         equity=5000.0,
     )
-    
+
     # Passing stale candle time triggers circuit breaker
     decision = risk.evaluate_signal(sig, portfolio, latest_market_time=old_time)
     assert decision.approved is False
@@ -142,7 +141,7 @@ def test_i5_daily_loss_limit_breach():
         equity=4900.0,
         daily_pnl=-150.0,  # Exceeds default $50 daily max loss
     )
-    
+
     sig = Signal(
         symbol="BTC/USDT",
         timestamp=datetime.now(timezone.utc),
@@ -155,7 +154,7 @@ def test_i5_daily_loss_limit_breach():
         regime=MarketRegime.BULL_TREND,
         reason="Daily loss test",
     )
-    
+
     decision = risk.evaluate_signal(sig, portfolio)
     assert decision.approved is False
     assert "DAILY" in decision.reason or "Daily loss" in decision.reason
@@ -173,7 +172,7 @@ def test_i6_mandatory_stop_loss_in_risk_engine():
         open_positions=[],
         equity=5000.0,
     )
-    
+
     # Stop loss higher than entry price on a LONG (invalid geometry)
     sig = Signal(
         symbol="BTC/USDT",
@@ -187,7 +186,7 @@ def test_i6_mandatory_stop_loss_in_risk_engine():
         regime=MarketRegime.BULL_TREND,
         reason="Invalid stop geometry",
     )
-    
+
     decision = risk.evaluate_signal(sig, portfolio)
     assert decision.approved is False
     assert "Invalid Stop/Target" in decision.reason
@@ -207,7 +206,7 @@ async def test_i7_live_protective_stop_fail_closed():
             Exception("Exchange error on protective stop"),        # Stop loss order fails
             {"id": "close_1", "average": 59980.0, "filled": 0.01}, # Fail-closed emergency market sell
         ])
-        
+
         engine = BinanceLiveExecutionEngine(api_key="k", api_secret="s", armed=True, client=mock_client)
         decision = RiskDecision(
             approved=True,
@@ -221,10 +220,10 @@ async def test_i7_live_protective_stop_fail_closed():
             risk_reward_ratio=2.0,
             reason="Live stop test",
         )
-        
+
         with pytest.raises(RuntimeError, match="FAIL-CLOSED INVARIANT"):
             await engine.submit_order(decision, strategy_name="live")
-        
+
         # Verify emergency market sell was invoked to close the unprotected position
         assert mock_client.create_order.call_count == 3
     finally:
@@ -242,7 +241,7 @@ async def test_i8_reconciliation_detects_drift():
     mock_client.fetch_open_orders = AsyncMock(return_value=[
         {"id": "ghost_999", "symbol": "ETH/USDT", "side": "buy", "amount": 2.0}
     ])
-    
+
     report = await reconciler.reconcile_orders_and_positions(
         local_open_positions={},
         local_orders={},
@@ -261,7 +260,7 @@ async def test_i9_idempotency_duplicate_order_prevention():
     om = OrderManager()
     engine = PaperExecutionEngine(initial_balance=5000.0)
     om.bind_execution_engine(engine)
-    
+
     decision = RiskDecision(
         approved=True,
         symbol="BTC/USDT",
@@ -274,12 +273,12 @@ async def test_i9_idempotency_duplicate_order_prevention():
         risk_reward_ratio=2.0,
         reason="Idempotency test",
     )
-    
+
     order1, fill1, pos1 = await om.execute_risk_decision(decision, strategy_name="test")
     # Submitting exact same intent again must raise DUPLICATE_ORDER_ATTEMPT
     with pytest.raises(ValueError, match="DUPLICATE_ORDER_ATTEMPT"):
         await om.execute_risk_decision(decision, strategy_name="test")
-    
+
     # Invariant: open positions count remains exactly 1 (no duplicate order filled!)
     assert len(engine.open_positions) == 1
 
@@ -303,7 +302,7 @@ def test_i13_exchange_symbol_filters_validation():
 # =============================================================================
 def test_adversarial_nan_inf_negative_inputs():
     dq = DataQualityEngine()
-    
+
     # NaN price candle
     c_nan = Candle(
         symbol="BTC/USDT",
@@ -318,7 +317,7 @@ def test_adversarial_nan_inf_negative_inputs():
     res_nan = dq.validate_candle(c_nan)
     assert res_nan.valid is False
     assert "NaN or Inf" in res_nan.reason
-    
+
     # Negative quantity filter
     is_valid, reason, _, _ = symbol_filter_engine.normalize_and_validate(
         symbol="BTC/USDT",
@@ -335,7 +334,7 @@ def test_adversarial_nan_inf_negative_inputs():
 def test_adversarial_out_of_order_candle():
     dq = DataQualityEngine()
     now = datetime.now(timezone.utc)
-    
+
     prev_c = Candle(
         symbol="BTC/USDT",
         timeframe=Timeframe.M15,
@@ -346,7 +345,7 @@ def test_adversarial_out_of_order_candle():
         close=60500.0,
         volume=100.0,
     )
-    
+
     # Earlier timestamp arriving after prev_c
     out_of_order_c = Candle(
         symbol="BTC/USDT",
@@ -358,7 +357,7 @@ def test_adversarial_out_of_order_candle():
         close=60500.0,
         volume=100.0,
     )
-    
+
     res = dq.validate_candle(out_of_order_c, prev_candle=prev_c)
     assert res.valid is False
     assert "Out-of-order" in res.reason

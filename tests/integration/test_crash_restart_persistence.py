@@ -1,6 +1,5 @@
-import pytest
 from services.execution.paper_execution import PaperExecutionEngine
-from shared.enums import SignalDirection, PositionStatus, OrderStatus
+from shared.enums import PositionStatus, SignalDirection
 from shared.schemas import RiskDecision
 
 

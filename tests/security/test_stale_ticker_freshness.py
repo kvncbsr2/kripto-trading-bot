@@ -1,5 +1,7 @@
 import time
+
 import pytest
+
 from services.market_data.market_data_service import MarketDataService
 
 

@@ -8,6 +8,7 @@ The Synthesizer reconciles their arguments to prevent confirmation bias and LLM 
 
 import json
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 from core.llm.llm_provider import BaseLLMProvider, get_llm_provider
@@ -57,7 +58,7 @@ class BullBearDebateEngine:
 
     async def run_debate(self, market_context: Dict[str, Any]) -> DebateVerdict:
         evidence = self._extract_evidence(market_context)
-        
+
         # Formulate structured prompt for dialectic debate
         system_prompt = (
             "You are the Chief Market Debate Moderator in an algorithmic quantitative crypto hedge fund. "
@@ -113,7 +114,7 @@ class BullBearDebateEngine:
 
         except Exception as e:
             logger.warning(f"Debate LLM parsing error: {e}. Executing rule-based dialectic synthesis.")
-            
+
             # Rule-based dialectic fallback
             rsi = evidence["rsi"]
             bull_score = 0

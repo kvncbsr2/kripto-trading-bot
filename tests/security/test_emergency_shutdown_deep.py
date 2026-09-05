@@ -1,8 +1,9 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
+from apps.api.app.api.state import RUNTIME_STATE
 from apps.api.app.main import app
 from shared.config import get_settings
-from apps.api.app.api.state import RUNTIME_STATE
 
 
 @pytest.mark.asyncio

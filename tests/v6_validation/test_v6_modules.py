@@ -267,8 +267,9 @@ async def test_v6_api_endpoints(client: AsyncClient):
 
     # 4. Run Strategy Discovery Tournament
     from unittest.mock import AsyncMock, patch
-    from shared.schemas import Candle
+
     from shared.enums import Timeframe
+    from shared.schemas import Candle
     base_ts = datetime.now(timezone.utc)
     mock_candles = [
         Candle(

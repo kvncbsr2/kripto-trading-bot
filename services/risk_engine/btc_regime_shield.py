@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Tuple
+
 from shared.config import get_settings
 from shared.logging import get_logger
 from shared.schemas import Candle

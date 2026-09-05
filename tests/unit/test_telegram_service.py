@@ -1,5 +1,6 @@
+
 import pytest
-from unittest.mock import patch, AsyncMock
+
 from services.notification_service.telegram_service import TelegramNotificationService
 
 
@@ -7,7 +8,7 @@ from services.notification_service.telegram_service import TelegramNotificationS
 async def test_telegram_mock_when_disabled():
     service = TelegramNotificationService()
     service.enabled = False
-    
+
     # In mock mode, send_message should return True without making HTTP requests
     res = await service.send_message("Test message")
     assert res is True
@@ -34,7 +35,7 @@ async def test_telegram_mock_when_disabled():
 def test_telegram_command_handler():
     service = TelegramNotificationService()
     state = {"equity": 5050.0, "balance": 4800.0, "daily_pnl": 50.0, "open_positions": []}
-    
+
     res_status = service.handle_command("/status", state)
     assert "ACTIVE" in res_status
     assert "$5050.00" in res_status

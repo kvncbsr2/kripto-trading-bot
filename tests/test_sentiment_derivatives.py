@@ -1,6 +1,7 @@
 import pytest
-from services.market_data.crypto_sentiment import CryptoSentimentService
+
 from services.market_data.binance_derivatives import BinanceDerivativesService
+from services.market_data.crypto_sentiment import CryptoSentimentService
 
 
 @pytest.mark.asyncio

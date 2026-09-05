@@ -1,7 +1,8 @@
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
 import httpx
-from shared.config import get_settings
+
 from shared.logging import get_logger
 
 logger = get_logger("dynamic-screener", service="scanner")
@@ -26,7 +27,7 @@ class DynamicUniverseScreener:
     Intelligent Dynamic Binance Spot Screener.
     Filters the 3,600+ Binance universe to identify the top 30-50 most liquid,
     sensible, high-quality USDT trading pairs.
-    
+
     Invariants:
     1. Liquidity Guard: Minimum $10M 24h volume to prevent slippage & illiquidity traps.
     2. Asset Guard: Strictly genuine USDT spot pairs (no stablecoin-to-stablecoin, no leveraged).

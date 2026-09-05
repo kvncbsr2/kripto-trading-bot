@@ -1,6 +1,7 @@
 import pytest
-from core.llm.llm_provider import HeuristicFallbackProvider, get_llm_provider
+
 from agents.debate.bull_bear_engine import BullBearDebateEngine, DebateVerdict
+from core.llm.llm_provider import HeuristicFallbackProvider, get_llm_provider
 from shared.enums import SignalDirection
 
 
