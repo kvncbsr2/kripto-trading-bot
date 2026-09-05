@@ -15,7 +15,7 @@ settings = get_settings()
 class RiskLimitsUpdateRequest(BaseModel):
     risk_per_trade: Optional[float] = Field(None, ge=0.001, le=0.05)
     daily_max_loss_usd: Optional[float] = Field(None, ge=10.0, le=500.0)
-    max_open_positions: Optional[int] = Field(None, ge=1, le=10)
+    max_open_positions: Optional[int] = Field(None, ge=1, le=25)
 
 
 @router.get("/risk/status")

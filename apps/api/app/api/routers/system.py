@@ -280,7 +280,7 @@ async def post_stop_agent(
 class RiskConfigPayload(BaseModel):
     risk_per_trade_pct: Optional[float] = Field(None, ge=0.001, le=0.05)
     daily_max_loss_pct: Optional[float] = Field(None, ge=10.0, le=500.0)
-    max_open_positions: Optional[int] = Field(None, ge=1, le=10)
+    max_open_positions: Optional[int] = Field(None, ge=1, le=25)
     atr_multiplier: Optional[float] = Field(None, ge=0.5, le=5.0)
 
 

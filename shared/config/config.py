@@ -74,8 +74,8 @@ class Settings(BaseSettings):
     DAILY_TARGET_MIN: float = 20.0
     DAILY_TARGET_MAX: float = 100.0
     TARGET_MODE: str = "SOFT"  # SOFT or HARD
-    MAX_TRADES_PER_DAY: int = 10
-    MAX_OPEN_POSITIONS: int = 3
+    MAX_TRADES_PER_DAY: int = 25
+    MAX_OPEN_POSITIONS: int = 6
     LEVERAGE: float = 1.0
 
     # Execution & Cost Simulation
