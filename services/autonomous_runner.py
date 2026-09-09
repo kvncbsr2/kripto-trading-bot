@@ -469,7 +469,7 @@ class AutonomousPaperTrader:
             service="runner"
         )
 
-        scan_sem = asyncio.Semaphore(25)
+        scan_sem = asyncio.Semaphore(12)
 
         async def _scan_single_symbol(sym: str):
             async with scan_sem:

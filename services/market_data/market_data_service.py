@@ -158,7 +158,7 @@ class MarketDataService:
 
         # 2. Query Binance REST via CCXT
         try:
-            raw = await asyncio.wait_for(self.connector.rest_client.fetch_ticker(symbol), timeout=3.0)
+            raw = await asyncio.wait_for(self.connector.rest_client.fetch_ticker(symbol), timeout=12.0)
             if raw and raw.get("bid") and raw.get("ask"):
                 bid = float(raw["bid"])
                 ask = float(raw["ask"])

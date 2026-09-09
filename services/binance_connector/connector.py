@@ -123,7 +123,7 @@ class BinanceConnector:
                 kwargs["since"] = since
             raw_klines = await asyncio.wait_for(
                 self.rest_client.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit, **kwargs),
-                timeout=4.0,
+                timeout=25.0,
             )
             candles = []
             for k in raw_klines:
@@ -165,6 +165,9 @@ class BinanceConnector:
                     candles.pop()
 
             return candles
+        except asyncio.TimeoutError:
+            logger.warning(f"REST fetch_ohlcv timed out (25s) for {symbol}")
+            return []
         except Exception as e:
             logger.error(f"REST fetch_ohlcv error for {symbol}: {e}")
             return []
