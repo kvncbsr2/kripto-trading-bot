@@ -86,3 +86,4 @@ kripto_agent_worker.lock
 scratch_inventory.json
 scratch_seed.py
 testsprite-plans/
+cloudflared.exe
