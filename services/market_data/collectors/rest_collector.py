@@ -19,6 +19,16 @@ class RestMarketDataCollector:
             {
                 "enableRateLimit": True,
                 "timeout": 20000,
+                "options": {
+                    "defaultType": "spot",
+                    "fetchMarkets": ["spot"],
+                },
+                "urls": {
+                    "api": {
+                        "public": "https://data-api.binance.vision/api/v3",
+                        "fapiPublic": "https://data-api.binance.vision/api/v3",
+                    }
+                },
             }
         )
 
