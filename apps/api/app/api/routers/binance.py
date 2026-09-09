@@ -56,23 +56,31 @@ async def get_binance_status():
 
 @router.get("/binance/test-connection")
 async def get_binance_test_connection():
-    try:
-        url = "https://api.binance.com/api/v3/ping"
-        req = urllib.request.Request(url, headers={"User-Agent": "KriptoAgent/6.0"})
-        t0 = time.perf_counter()
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            t1 = time.perf_counter()
-            latency_ms = round((t1 - t0) * 1000.0, 1)
-            if resp.status == 200:
-                return {
-                    "status": "ONLINE",
-                    "exchange": "binance",
-                    "latency_ms": latency_ms,
-                    "message": f"Binance Public REST API erişilebilir ({latency_ms}ms).",
-                }
-    except Exception as e:
-        return {
-            "status": "OFFLINE",
+    urls = [
+        "https://data-api.binance.vision/api/v3/ping",
+        "https://api.binance.com/api/v3/ping",
+    ]
+    last_err = None
+    for url in urls:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "KriptoAgent/6.0"})
+            t0 = time.perf_counter()
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                t1 = time.perf_counter()
+                latency_ms = round((t1 - t0) * 1000.0, 1)
+                if resp.status == 200:
+                    return {
+                        "status": "ONLINE",
+                        "exchange": "binance",
+                        "latency_ms": latency_ms,
+                        "message": f"Binance Public REST API erişilebilir ({latency_ms}ms).",
+                    }
+        except Exception as e:
+            last_err = e
+            continue
+
+    return {
+        "status": "OFFLINE",
             "exchange": "binance",
             "error": str(e),
             "message": "Binance Public REST API erişilemedi.",

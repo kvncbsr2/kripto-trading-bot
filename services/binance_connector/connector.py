@@ -68,12 +68,17 @@ class BinanceConnector:
         self._processed_candle_keys: set = set()
 
 
-        # REST client (read-only)
+        # REST client (read-only, uses data-api.binance.vision to avoid US cloud geo-blocking 451)
         self.rest_client = ccxt.binance(
             {
                 "enableRateLimit": True,
                 "timeout": 4000,
                 "options": {"defaultType": "spot"},
+                "urls": {
+                    "api": {
+                        "public": "https://data-api.binance.vision/api/v3",
+                    }
+                },
             }
         )
 

@@ -62,14 +62,24 @@ class DynamicUniverseScreener:
             return self._cached_symbols
 
         try:
-            url = "https://api.binance.com/api/v3/ticker/24hr"
+            urls = [
+                "https://data-api.binance.vision/api/v3/ticker/24hr",
+                "https://api.binance.com/api/v3/ticker/24hr",
+            ]
+            data = None
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-                if resp.status_code != 200:
-                    logger.warning(f"Binance 24hr ticker query failed (status {resp.status_code}). Using fallback universe.")
-                    return []
+                for url in urls:
+                    try:
+                        resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            break
+                    except Exception:
+                        continue
 
-                data = resp.json()
+            if not data:
+                logger.warning("Binance 24hr ticker query failed on all endpoints. Using fallback universe.")
+                return []
 
             filtered: List[Dict[str, Any]] = []
             for item in data:
