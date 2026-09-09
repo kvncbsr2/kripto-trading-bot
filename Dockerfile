@@ -22,5 +22,5 @@ COPY . .
 # Expose API port
 EXPOSE 8000
 
-# Default command starts the API server
-CMD ["uvicorn", "apps.api.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default command starts the API server (supports cloud dynamic $PORT)
+CMD ["sh", "-c", "uvicorn apps.api.app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
