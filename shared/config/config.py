@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     PAPER_TRADING: bool = True
     LIVE_TRADING: bool = False  # Hard guardrail (default False)
     LIVE_TRADING_ARMED: bool = False  # Step 2 of two-step activation
+    AUTONOMOUS_AUTO_START: bool = True  # Automatically start autonomous paper trading on boot
 
     # API Security & Authentication (Section 27)
     API_KEY_AUTH_ENABLED: bool = True  # Production-safe default

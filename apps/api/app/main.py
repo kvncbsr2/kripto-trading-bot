@@ -41,12 +41,10 @@ async def lifespan(app: FastAPI):
     RUNTIME_STATE["system_state"] = "READY"
     logger.info("System state transitioned to [READY].")
 
-    # Wire Autonomous Trader - initialized in OFF state by default (Requirement 4 & 32)
+    # Wire Autonomous Trader
     autonomous_trader.bind_command_bus(command_bus)
     autonomous_trader.bind_market_data_service(market_data_service)
     autonomous_trader.risk_engine = risk_engine
-    autonomous_trader.is_active = False
-    logger.info("Autonomous Paper Trader loop initialized (OFF by default).")
 
     # Synchronize and restore persisted Risk Profile and Strategy (Architecture V2)
     try:
@@ -54,6 +52,17 @@ async def lifespan(app: FastAPI):
         restore_runtime_system_state()
     except Exception as e:
         logger.warning(f"Failed to restore persisted profile state: {e}")
+
+    # Auto-start Autonomous Trader loop (7/24 Continuous Cloud Execution)
+    if getattr(settings, "AUTONOMOUS_AUTO_START", True):
+        try:
+            autonomous_trader.start()
+            logger.info("Autonomous Paper Trader loop auto-started on boot.")
+        except Exception as e:
+            logger.warning(f"Autonomous Paper Trader auto-start warning: {e}")
+    else:
+        autonomous_trader.is_active = False
+        logger.info("Autonomous Paper Trader loop initialized (OFF by default).")
 
     # Start Telegram background listener if enabled
     telegram_task = None
