@@ -188,14 +188,20 @@ class WhaleRadarTracker:
     async def _ws_consumer_loop(self):
         """Persistent WebSocket loop for Binance combined aggTrade streams."""
         streams = "/".join([f"{s.lower()}@aggTrade" for s in self.symbols])
-        ws_url = f"wss://stream.binance.com:9443/stream?streams={streams}"
+        ws_endpoints = [
+            "wss://data-stream.binance.vision/stream?streams=",
+            "wss://stream.binance.com:9443/stream?streams=",
+        ]
+        url_idx = 0
 
         while self._is_running:
+            base_url = ws_endpoints[url_idx % len(ws_endpoints)]
+            ws_url = f"{base_url}{streams}"
             try:
                 if not self._session or self._session.closed:
                     self._session = aiohttp.ClientSession()
 
-                logger.info("Connecting to Binance Combined Whale Stream...")
+                logger.info(f"Connecting to Binance Combined Whale Stream via {base_url[:35]}...")
                 async with self._session.ws_connect(ws_url, heartbeat=25.0) as ws:
                     logger.info("Binance Whale Stream connected successfully.")
                     async for msg in ws:
@@ -243,6 +249,7 @@ class WhaleRadarTracker:
             except asyncio.CancelledError:
                 break
             except Exception as e:
+                url_idx += 1
                 logger.warning(f"Whale stream connection error: {e}. Reconnecting in 5s...")
                 await asyncio.sleep(5)
 

@@ -37,6 +37,10 @@ class BinanceConnector:
     """
 
     WS_STREAM_URL = "wss://stream.binance.com:9443/stream?streams="
+    WS_STREAM_URLS = [
+        "wss://data-stream.binance.vision/stream?streams=",
+        "wss://stream.binance.com:9443/stream?streams=",
+    ]
 
     def __init__(
         self,
@@ -177,13 +181,15 @@ class BinanceConnector:
 
         self.subscriptions = streams
         stream_query = "/".join(streams)
-        full_ws_url = f"{self.WS_STREAM_URL}{stream_query}"
 
+        url_idx = 0
         while self._running:
+            base_url = self.WS_STREAM_URLS[url_idx % len(self.WS_STREAM_URLS)]
+            full_ws_url = f"{base_url}{stream_query}"
             try:
                 self.state = ConnectionState.CONNECTING
                 logger.info(
-                    f"Connecting to Binance real-time WebSocket ({len(self.symbols)} pairs)..."
+                    f"Connecting to Binance real-time WebSocket ({len(self.symbols)} pairs) via {base_url[:35]}..."
                 )
 
                 async with websockets.connect(full_ws_url, ping_interval=20, ping_timeout=10) as ws:
@@ -207,6 +213,7 @@ class BinanceConnector:
                 if not self._running:
                     self.state = ConnectionState.STOPPED
                     break
+                url_idx += 1
                 self._reconnect_count += 1
                 self.state = ConnectionState.RECONNECTING
                 jitter = random.uniform(0.8, 1.2)
