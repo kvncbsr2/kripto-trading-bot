@@ -1,9 +1,11 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from apps.api.app.api.router import router as api_router
 from apps.api.app.api.state import RUNTIME_STATE, command_bus, market_data_service, risk_engine
@@ -46,12 +48,44 @@ async def lifespan(app: FastAPI):
     autonomous_trader.is_active = False
     logger.info("Autonomous Paper Trader loop initialized (OFF by default).")
 
+    # Synchronize and restore persisted Risk Profile and Strategy (Architecture V2)
+    try:
+        from services.config_manager.risk_profiles import restore_runtime_system_state
+        restore_runtime_system_state()
+    except Exception as e:
+        logger.warning(f"Failed to restore persisted profile state: {e}")
+
+    # Start Telegram background listener if enabled
+    telegram_task = None
+    try:
+        from services.notification_service.telegram_service import telegram_service
+        telegram_service.reload_config()
+        if telegram_service.enabled:
+            telegram_task = asyncio.create_task(telegram_service.start_polling())
+            logger.info("Telegram command listener started in background.")
+    except Exception as e:
+        logger.warning(f"Telegram listener startup warning: {e}")
+
+    # Start Whale Radar background tracker
+    try:
+        from services.intelligence.whale_tracker import whale_tracker
+        whale_tracker.start()
+        logger.info("Whale Radar background service started.")
+    except Exception as e:
+        logger.warning(f"Failed to start Whale Radar service: {e}")
+
     yield
 
     # Teardown
     logger.info("Shutting down KRIPTO AGENT API...")
     RUNTIME_STATE["system_state"] = "SHUTDOWN"
     try:
+        if telegram_task and not telegram_task.done():
+            from services.notification_service.telegram_service import telegram_service
+            telegram_service.stop_polling()
+            telegram_task.cancel()
+        from services.intelligence.whale_tracker import whale_tracker
+        await whale_tracker.stop()
         autonomous_trader.stop()
         await market_data_service.stop()
     except Exception as e:
@@ -85,12 +119,26 @@ app.add_middleware(
 # Mount all endpoints via modular aggregator
 app.include_router(api_router)
 
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+
+@app.get("/dashboard.html", response_class=HTMLResponse)
 @app.get("/dashboard", response_class=HTMLResponse)
 @app.get("/", response_class=HTMLResponse)
-async def serve_dashboard():
+async def serve_dashboard(response: Response):
     dashboard_path = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
     if os.path.exists(dashboard_path):
+        response.set_cookie(
+            key="kripto_admin_token",
+            value=settings.API_ADMIN_KEY,
+            httponly=False,
+            samesite="lax",
+            path="/",
+        )
         with open(dashboard_path, "r", encoding="utf-8") as f:
-            return f.read()
+            content = f.read()
+            injected = f'<script>window.__KRIPTO_API_KEY__ = "{settings.API_ADMIN_KEY}";</script>'
+            return content.replace("<head>", f"<head>\n    {injected}", 1)
     return "<h1>KRIPTO AGENT Dashboard</h1><p>Static dashboard not found. Use Next.js app on port 3000.</p>"

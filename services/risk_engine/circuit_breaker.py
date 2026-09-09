@@ -33,8 +33,23 @@ class CircuitBreaker:
         self.trip_reason: Optional[str] = None
         self.trades_today_count: int = 0
         self.last_day_reset: Optional[datetime] = None
+        self.baseline_trade_count: int = 0
 
-    def record_trade(self):
+    def _rollover_utc_day(self, current_time: Optional[datetime] = None):
+        now = current_time or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        if self.last_day_reset is None:
+            self.last_day_reset = now
+            return
+        if self.last_day_reset.astimezone(timezone.utc).date() != now.astimezone(timezone.utc).date():
+            self.trades_today_count = 0
+            self.state = CircuitState.NORMAL
+            self.trip_reason = None
+            self.last_day_reset = now
+
+    def record_trade(self, current_time: Optional[datetime] = None):
+        self._rollover_utc_day(current_time)
         self.trades_today_count += 1
         if self.trades_today_count >= self.max_trades_per_day:
             self.state = CircuitState.LOCKED
@@ -51,6 +66,8 @@ class CircuitBreaker:
         """
         Evaluates system limits. Returns (should_halt, reason, event_type).
         """
+        now = current_time or datetime.now(timezone.utc)
+        self._rollover_utc_day(now)
         if self.state in [CircuitState.LOCKED, CircuitState.EMERGENCY]:
             return True, self.trip_reason, RiskEventType.CIRCUIT_BREAKER_TRIGGERED
 
@@ -70,7 +87,6 @@ class CircuitBreaker:
 
         # 3. Market Data Freshness / Stale Data Check
         if latest_candle_time is not None:
-            now = current_time or datetime.now(timezone.utc)
             if now.tzinfo is None:
                 now = now.replace(tzinfo=timezone.utc)
             candle_time = latest_candle_time
@@ -86,7 +102,35 @@ class CircuitBreaker:
 
         return False, None, None
 
-    def reset(self):
+    def check_expectancy(self, closed_positions: list) -> Tuple[bool, Optional[str], Optional[RiskEventType]]:
+        """
+        Evaluates mathematical expectancy over closed positions.
+        Rule: If N >= 5 and Expectancy <= 0, halt immediately.
+        """
+        if self.state in [CircuitState.LOCKED, CircuitState.EMERGENCY]:
+            return True, self.trip_reason, RiskEventType.CIRCUIT_BREAKER_TRIGGERED
+
+        # Only evaluate trades since the baseline trade count (e.g. after a manual reset/unhalt)
+        eval_trades = closed_positions[self.baseline_trade_count:] if self.baseline_trade_count > 0 else closed_positions
+
+        from services.risk_engine.expectancy_engine import ExpectancyEngine
+        metrics = ExpectancyEngine.calculate_from_positions(eval_trades)
+        if metrics.get("should_halt", False):
+            self.state = CircuitState.LOCKED
+            exp_usd = metrics['expectancy_usd_per_trade']
+            exp_str = f"-${abs(exp_usd):.2f}" if exp_usd < 0 else f"${exp_usd:.2f}"
+            self.trip_reason = (
+                f"EXPECTANCY_HALT: Mathematical Expectancy turned negative ({exp_str} <= 0). "
+                f"WinRate %{metrics['win_rate_pct']:.1f} fell below breakeven %{metrics['breakeven_win_rate_pct']:.1f}. Trading halted."
+            )
+            logger.critical(self.trip_reason)
+            return True, self.trip_reason, RiskEventType.CIRCUIT_BREAKER_TRIGGERED
+
+        return False, None, None
+
+    def reset(self, baseline_trade_count: Optional[int] = None):
         self.state = CircuitState.NORMAL
         self.trip_reason = None
-        logger.info("Circuit breaker manually reset to NORMAL.")
+        if baseline_trade_count is not None:
+            self.baseline_trade_count = baseline_trade_count
+        logger.info(f"Circuit breaker manually reset to NORMAL (baseline_trade_count={self.baseline_trade_count}).")

@@ -15,6 +15,17 @@ from shared.schemas import Candle, FeatureVector, MarketRegimeState, Signal
 logger = get_logger("regime-gated-pullback", service="strategy_engine")
 
 
+def _format_price_precision(price: float) -> float:
+    if price >= 100:
+        return round(price, 2)
+    elif price >= 1:
+        return round(price, 4)
+    elif price >= 0.01:
+        return round(price, 6)
+    else:
+        return round(price, 8)
+
+
 class RegimeGatedPullbackStrategy(BaseStrategy):
     """
     REGIME-GATED PULLBACK CONTINUATION STRATEGY
@@ -183,13 +194,13 @@ class RegimeGatedPullbackStrategy(BaseStrategy):
         # 7. Stop Geometry: confirmed swing low of pullback or ATR multiple
         recent_lows = low[-5:]
         swing_low = float(np.min(recent_lows))
-        atr_stop = round(c_close - (curr_atr * self.atr_multiplier), 2)
+        atr_stop = _format_price_precision(c_close - (curr_atr * self.atr_multiplier))
         # Use tighter of swing low (with small buffer) or ATR stop
-        stop_price = max(round(swing_low * 0.999, 2), atr_stop)
+        stop_price = max(_format_price_precision(swing_low * 0.999), atr_stop)
         
         # Ensure stop is below entry
         if stop_price >= c_close:
-            stop_price = round(c_close - (curr_atr * self.atr_multiplier), 2)
+            stop_price = _format_price_precision(c_close - (curr_atr * self.atr_multiplier))
 
         risk_dist = c_close - stop_price
         if risk_dist <= 0:
@@ -197,19 +208,19 @@ class RegimeGatedPullbackStrategy(BaseStrategy):
 
         # Target based on selected exit model
         if self.exit_model == "A":
-            take_profit = round(c_close + (risk_dist * 1.5), 2)
+            take_profit = _format_price_precision(c_close + (risk_dist * 1.5))
             exit_notes = "Fixed 1.5R"
         elif self.exit_model == "B":
-            take_profit = round(c_close + (risk_dist * self.risk_reward_ratio), 2)
+            take_profit = _format_price_precision(c_close + (risk_dist * self.risk_reward_ratio))
             exit_notes = "Fixed 2.0R"
         elif self.exit_model == "C":
-            take_profit = round(c_close + (risk_dist * 1.0), 2)
+            take_profit = _format_price_precision(c_close + (risk_dist * 1.0))
             exit_notes = "Partial 1.0R + Trailing"
         elif self.exit_model == "D":
-            take_profit = round(c_close + (risk_dist * 2.5), 2)
+            take_profit = _format_price_precision(c_close + (risk_dist * 2.5))
             exit_notes = "ATR Trailing Target"
         else:
-            take_profit = round(c_close + (risk_dist * 2.0), 2)
+            take_profit = _format_price_precision(c_close + (risk_dist * 2.0))
             exit_notes = "Default 2.0R"
 
         confidence_score = min(95.0, 70.0 + (curr_vol_ratio - 1.0) * 15.0 + (curr_rsi - 45.0) * 0.5)
@@ -237,6 +248,27 @@ class RegimeGatedPullbackStrategy(BaseStrategy):
                 "risk_dist": round(float(risk_dist), 2),
             },
         )
+
+    def evaluate_from_dataframe(
+        self,
+        df: pd.DataFrame,
+        symbol: str,
+    ) -> Optional[Signal]:
+        """
+        Direct DataFrame evaluation for AutonomousPaperTrader live scan loop.
+        Evaluates pullback continuation pattern on closed candles.
+        Trend confirmation is derived from EMA20 >= EMA50 alignment on the dataframe.
+        """
+        if not self.enabled or len(df) < 50:
+            return None
+
+        # Check trend structure: EMA20 >= EMA50 (within 0.5% tolerance)
+        close = df["close"]
+        ema_20 = calculate_ema(close, 20).iloc[-1]
+        ema_50 = calculate_ema(close, 50).iloc[-1]
+        trend_1h_active = not np.isnan(ema_20) and not np.isnan(ema_50) and ema_20 >= (ema_50 * 0.995)
+
+        return self.evaluate_15m_pullback(df_15m=df, symbol=symbol, trend_1h_active=trend_1h_active)
 
     def evaluate(
         self,
@@ -285,8 +317,8 @@ class RegimeGatedPullbackStrategy(BaseStrategy):
             return None
 
         stop_dist = atr * self.atr_multiplier
-        stop_price = round(close - stop_dist, 2)
-        take_profit = round(close + (stop_dist * self.risk_reward_ratio), 2)
+        stop_price = _format_price_precision(close - stop_dist)
+        take_profit = _format_price_precision(close + (stop_dist * self.risk_reward_ratio))
 
         return Signal(
             symbol=features.symbol,

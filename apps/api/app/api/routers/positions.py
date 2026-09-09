@@ -1,4 +1,6 @@
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -13,6 +15,9 @@ from database.session import get_async_db
 from shared.logging import get_logger
 
 logger = get_logger("positions-router", service="api")
+
+# Authoritative project root (KRIPTO AGENT folder)
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
 
 router = APIRouter(tags=["positions"])
 
@@ -74,23 +79,34 @@ async def get_positions(status: str = "OPEN", response: Response = None, db: Asy
     # Include in-memory paper broker open positions
     if command_bus.broker:
         for symbol, p in command_bus.broker.open_positions.items():
-            if not any(x["position_id"] == p.position_id for x in pos_list):
-                pos_list.append({
-                    "position_id": p.position_id,
-                    "symbol": p.symbol,
-                    "side": p.side.value if hasattr(p.side, "value") else str(p.side),
-                    "entry_price": p.entry_price,
-                    "current_price": p.current_price,
-                    "quantity": p.quantity,
-                    "stop_loss": p.stop_loss,
-                    "take_profit": p.take_profit,
-                    "unrealized_pnl": p.unrealized_pnl,
-                    "realized_pnl": p.realized_pnl,
-                    "status": p.status.value if hasattr(p.status, "value") else str(p.status),
-                    "strategy": p.strategy,
-                    "opened_at": p.opened_at.isoformat() if hasattr(p.opened_at, "isoformat") else str(p.opened_at),
-                    "closed_at": None,
-                })
+            try:
+                ticker = await market_data_service.get_live_ticker(p.symbol)
+                if ticker and "price" in ticker and ticker["price"] > 0:
+                    command_bus.broker.update_market_price(p.symbol, float(ticker["price"]))
+            except Exception:
+                pass
+
+            existing_idx = next((i for i, x in enumerate(pos_list) if x["position_id"] == p.position_id), None)
+            pos_dict = {
+                "position_id": p.position_id,
+                "symbol": p.symbol,
+                "side": p.side.value if hasattr(p.side, "value") else str(p.side),
+                "entry_price": p.entry_price,
+                "current_price": p.current_price,
+                "quantity": p.quantity,
+                "stop_loss": p.stop_loss,
+                "take_profit": p.take_profit,
+                "unrealized_pnl": round(p.unrealized_pnl, 2),
+                "realized_pnl": round(p.realized_pnl, 2),
+                "status": p.status.value if hasattr(p.status, "value") else str(p.status),
+                "strategy": p.strategy,
+                "opened_at": p.opened_at.isoformat() if hasattr(p.opened_at, "isoformat") else str(p.opened_at),
+                "closed_at": None,
+            }
+            if existing_idx is not None:
+                pos_list[existing_idx] = pos_dict
+            else:
+                pos_list.append(pos_dict)
 
     if not db_query_ok and response is not None:
         response.headers["X-DB-Query-Error"] = "true"
@@ -180,6 +196,8 @@ async def get_position_history():
             exit_price = pos.current_price or pos.entry_price
             cost_basis = pos.entry_price * pos.quantity
             roi_pct = (pos.realized_pnl / cost_basis * 100.0) if cost_basis > 0 else 0.0
+            total_fee = round(float(pos.fees_paid or 0.0), 4)
+            fee_pct = round((total_fee / cost_basis * 100.0), 3) if cost_basis > 0 else 0.0
             opened_str = (
                 pos.opened_at.strftime("%d/%m/%Y %H:%M:%S")
                 if hasattr(pos.opened_at, "strftime")
@@ -202,6 +220,8 @@ async def get_position_history():
                 "realized_pnl": round(pos.realized_pnl, 2),
                 "roi_pct": round(roi_pct, 2),
                 "closed_volume_usd": round(exit_price * pos.quantity, 2),
+                "fees_paid": round(total_fee, 2),
+                "fee_pct": round(fee_pct, 2),
                 "entry_price": pos.entry_price,
                 "exit_price": exit_price,
                 "quantity": pos.quantity,
@@ -229,12 +249,13 @@ async def get_position_history():
 
 @router.get("/api/v1/investor/report")
 @router.get("/investor/report")
-async def get_investor_report():
+async def get_investor_report(response: Response = None):
     """
-    Returns Authoritative, Certified Investor Performance Tearsheet for 7-Day Paper-Trading.
+    Returns All-Time Paper Trading Performance Tearsheet & Ledger Summary.
     Calculates exact Net PnL, Gross Profit/Loss, Total Fees/Commissions Paid, Slippage Drag,
     Profit Factor, Win Rate, and Individual Trade Ledger.
-    Zero Fake Data Policy: Sourced strictly from SQLite DB and authoritative broker.
+    Zero Fake Data Policy: Sourced strictly from SQLite DB and authoritative broker logs.
+    Note: Internal self-reported paper-trading ledger (not a third-party certified external audit).
     """
     import sqlite3
     from shared.config import get_settings
@@ -243,16 +264,40 @@ async def get_investor_report():
     initial_capital = float(getattr(settings, "INITIAL_CAPITAL", 5000.0))
     broker = command_bus.broker
 
-    # Read authoritative SQLite DB
-    db_path = getattr(broker, "db_path", "./kripto_agent.db") if broker else "./kripto_agent.db"
+    # 1. Authoritative Absolute DB Path Resolution (Fix relative path vulnerability)
+    raw_db_path = getattr(broker, "db_path", None) if broker else None
+    if raw_db_path and os.path.isabs(raw_db_path):
+        resolved_db_path = Path(raw_db_path)
+    else:
+        filename = os.path.basename(raw_db_path) if raw_db_path else "kripto_agent.db"
+        resolved_db_path = PROJECT_ROOT / filename
+
+    db_path_str = str(resolved_db_path)
+
+    # 2. Strict DB Existence Check (Prevents SQLite from silently creating an empty 0-byte file in arbitrary CWD)
+    if not resolved_db_path.exists():
+        err_msg = f"Database file does not exist at authoritative path: {db_path_str}"
+        logger.error(f"get_investor_report: {err_msg}")
+        if response is not None:
+            response.headers["X-DB-Query-Error"] = "true"
+            response.headers["X-DB-Status"] = "MISSING_FILE"
+        raise HTTPException(
+            status_code=503,
+            detail=f"Authoritative database file not found at {db_path_str}. Verify system initialization."
+        )
+
     closed_rows = []
     open_rows = []
     total_fill_fees = 0.0
     total_fill_slippage = 0.0
     acc_balance = initial_capital
+    db_query_ok = True
+    db_error_detail = None
 
     try:
-        conn = sqlite3.connect(db_path)
+        # Strict Read-Only Mode via URI (mode=ro guaranteed never to mutate or auto-create)
+        uri_path = resolved_db_path.as_posix()
+        conn = sqlite3.connect(f"file:{uri_path}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -275,7 +320,27 @@ async def get_investor_report():
 
         conn.close()
     except Exception as e:
-        logger.warning(f"Investor report DB read warning: {e}")
+        # FIX (2026-09): Surface DB query errors loudly and explicitly, never swallow silently
+        db_query_ok = False
+        db_error_detail = str(e)
+        logger.error(
+            f"get_investor_report: SQLite query failed on {db_path_str}: {e}. Surfacing error.",
+            exc_info=True
+        )
+        if response is not None:
+            response.headers["X-DB-Query-Error"] = "true"
+            response.headers["X-DB-Status"] = "QUERY_FAILED"
+
+        # If DB read failed and no in-memory backup is available, fail closed with HTTP 500
+        if not broker or (not getattr(broker, "closed_positions_history", None) and not closed_rows):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database query failed and no in-memory backup available: {db_error_detail}"
+            )
+
+    if db_query_ok and response is not None:
+        response.headers["X-DB-Query-Error"] = "false"
+        response.headers["X-DB-Status"] = "OK"
 
     # Fallback/merge with live broker memory if DB was empty or broker has newer records
     if broker:
@@ -338,6 +403,9 @@ async def get_investor_report():
     avg_loss = round(gross_loss / len(losses), 2) if losses else 0.0
     win_loss_ratio = round(avg_win / avg_loss, 2) if avg_loss > 0 else 0.0
 
+    from services.risk_engine.expectancy_engine import ExpectancyEngine
+    expectancy_data = ExpectancyEngine.calculate_from_positions(trade_ledger)
+
     return {
         "status": "SUCCESS",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -361,11 +429,12 @@ async def get_investor_report():
             "win_loss_ratio": win_loss_ratio,
             "active_positions_count": len(open_rows),
         },
+        "mathematical_expectancy": expectancy_data,
         "fee_and_cost_transparency": {
             "total_commissions_paid": total_commissions,
             "total_slippage_cost": round(total_fill_slippage, 2),
             "total_turnover_volume_usd": round(total_trade_volume, 2),
-            "effective_commission_rate_pct": round((total_commissions / total_trade_volume * 100.0), 3) if total_trade_volume > 0 else 0.10,
+            "effective_commission_rate_pct": round((total_commissions / total_trade_volume * 100.0), 3) if total_trade_volume > 0 else 0.0,
             "fee_drag_to_gross_profit_pct": round((total_commissions / gross_profit * 100.0), 1) if gross_profit > 0 else 0.0,
             "maker_fee_rate": getattr(settings, "MAKER_FEE", 0.001),
             "taker_fee_rate": getattr(settings, "TAKER_FEE", 0.001),
@@ -384,11 +453,31 @@ async def get_investor_report():
             }
             for r in open_rows
         ],
-        "system_audit_invariants": {
-            "execution_mode": "Paper Trading (0 Capital Risk)",
+        "system_parameters": {
+            "execution_mode": "Paper Trading (0 Capital Risk - Internal Engine Logs)",
             "data_source": "Binance Spot Live WebSockets & REST (Zero Fake Data)",
-            "strategy": "R10 Causal RSI Divergence (1h Timeframe)",
-            "risk_controls": "Strict Fail-Closed RiskEngine (1% Risk / Max 20 Positions)",
+            "strategy": "R10 Causal RSI Divergence + Regime-Gated Pullback",
+            "risk_controls": "Strict Fail-Closed RiskEngine (0.5% Risk / Max 5 Positions)",
             "spot_rule": "Long Only (Zero Liquidation / Zero Borrowing)",
+            "audit_disclaimer": "Self-reported simulated execution ledger; not a third-party certified audit.",
+        },
+        "data_source_integrity": {
+            "db_path": db_path_str,
+            "db_status": "VERIFIED_OK" if db_query_ok else "DEGRADED_FALLBACK",
+            "db_error": db_error_detail,
+            "access_mode": "Strict Read-Only (URI mode=ro)",
+            "zero_fake_data_guarantee": True,
         }
     }
+
+
+@router.get("/api/v1/investor/expectancy")
+async def get_mathematical_expectancy():
+    """
+    Returns real-time mathematical expectancy, win/loss ratio (b), breakeven rate,
+    and automated negative-expectancy circuit breaker state.
+    """
+    from services.risk_engine.expectancy_engine import ExpectancyEngine
+    broker = command_bus.broker
+    closed = getattr(broker, "closed_positions_history", []) if broker else []
+    return ExpectancyEngine.calculate_from_positions(closed)

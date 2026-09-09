@@ -1,4 +1,6 @@
 import asyncio
+import json
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -40,6 +42,17 @@ class MarketDataService:
         self._is_started = False
         self._ws_task: Optional[asyncio.Task] = None
 
+        # Load market cap reference for Binance top token ranking
+        self._market_caps = {}
+        mcap_path = os.path.join(os.path.dirname(__file__), "market_caps.json")
+        if os.path.exists(mcap_path):
+            try:
+                with open(mcap_path, "r", encoding="utf-8") as f:
+                    self._market_caps = json.load(f)
+                logger.info(f"Loaded {len(self._market_caps)} market cap rankings for Binance ordering.")
+            except Exception as e:
+                logger.warning(f"Failed to load market_caps.json: {e}")
+
         # Register callbacks with connector
         self.connector.add_candle_callback(self._on_candle_received)
         self.connector.add_book_ticker_callback(self._on_book_ticker_received)
@@ -74,7 +87,12 @@ class MarketDataService:
     # Callbacks & Data Quality Pipeline
     # -------------------------------------------------------------------------
     def _on_candle_received(self, candle: Candle):
+        # Strict anti-lookahead guarantee: only process closed bars
+        if not getattr(candle, "is_closed", True):
+            return
+
         # Validate data quality (monotonicity, spread, anomalous return)
+
         cached = self._candle_cache.get(candle.symbol, {}).get(candle.timeframe.value, [])
         prev_candle = cached[-1] if cached else None
         res = self.quality_engine.validate_candle(candle, prev_candle=prev_candle)
@@ -140,7 +158,7 @@ class MarketDataService:
 
         # 2. Query Binance REST via CCXT
         try:
-            raw = await self.connector.rest_client.fetch_ticker(symbol)
+            raw = await asyncio.wait_for(self.connector.rest_client.fetch_ticker(symbol), timeout=3.0)
             if raw and raw.get("bid") and raw.get("ask"):
                 bid = float(raw["bid"])
                 ask = float(raw["ask"])
@@ -164,19 +182,107 @@ class MarketDataService:
                 self._ticker_cache[symbol] = ticker_data
                 return ticker_data
         except Exception as e:
-            logger.error(f"Failed to fetch live Binance ticker for {symbol}: {e}")
+            logger.warning(f"Failed to fetch live Binance ticker for {symbol}: {e}")
 
         return None
 
     async def get_live_tickers(self, symbols: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """Returns live tickers for requested symbols. Omits any symbol where real data is unavailable."""
+        """Returns live tickers for requested symbols in parallel. Omits any symbol where real data is unavailable."""
         target_symbols = symbols or self.symbols
-        results = []
-        for s in target_symbols:
-            t = await self.get_live_ticker(s)
-            if t is not None:
-                results.append(t)
-        return results
+        tasks = [self.get_live_ticker(s) for s in target_symbols]
+        raw = await asyncio.gather(*tasks, return_exceptions=True)
+        return [r for r in raw if isinstance(r, dict) and r is not None]
+
+    async def get_all_binance_tickers(self) -> List[Dict[str, Any]]:
+        """
+        Fetches all live Binance Spot USDT tickers in a single bulk API call with 3-second caching.
+        Computes accurate spread_bps, 24h volume, 24h change %, and market condition tags.
+        """
+        now_ts = time.time()
+        cached = getattr(self, "_all_tickers_cache", None)
+        cached_ts = getattr(self, "_all_tickers_ts", 0.0)
+        if cached and (now_ts - cached_ts) < 3.0:
+            return cached
+
+        try:
+            raw_tickers = await self.connector.rest_client.fetch_tickers()
+            results = []
+            for symbol, t in raw_tickers.items():
+                if not symbol.endswith("/USDT"):
+                    continue
+                bid = float(t.get("bid") or 0.0)
+                ask = float(t.get("ask") or 0.0)
+                price = float(t.get("last") or ((bid + ask) / 2.0 if ask > 0 else 0.0))
+                if price <= 0.0:
+                    continue
+                spread = max(0.0, ask - bid)
+                spread_bps = (spread / ask * 10000.0) if ask > 0 else 0.0
+                vol_usdt = float(t.get("quoteVolume") or 0.0)
+                change_pct = float(t.get("percentage") or 0.0)
+                high_24h = float(t.get("high") or price)
+                low_24h = float(t.get("low") or price)
+
+                # Generate rule-based momentum summary heuristic based on 24h price range and change %
+                # (Deterministic heuristic rule engine, NOT machine learning or predictive AI model)
+                rng = high_24h - low_24h
+                pos_in_range = ((price - low_24h) / rng) if rng > 0 else 0.5
+
+                if change_pct >= 6.0:
+                    comment = f"24s Boğa Momentumu: +%{change_pct:.1f} yükseliş ile gün içi alıcı baskısı yüksek."
+                    tag = "YÜKSELİŞ"
+                    tag_color = "emerald"
+                elif change_pct <= -6.0:
+                    comment = f"24s Düzeltme: -%{abs(change_pct):.1f} gerileme ile aşırı satım tepkisi izleniyor."
+                    tag = "DİP FIRSATI"
+                    tag_color = "cyan"
+                elif pos_in_range <= 0.20:
+                    comment = f"24s Taban Desteğinde: Fiyat gün içi bant dibinde (%{(pos_in_range*100):.0f}), olası dönüş alanı."
+                    tag = "DİPTE"
+                    tag_color = "blue"
+                elif pos_in_range >= 0.85:
+                    comment = f"24s Zirve Testi: Günlük bant tepesinde (%{(pos_in_range*100):.0f}), kâr realizasyonu riski."
+                    tag = "ZİRVE"
+                    tag_color = "purple"
+                else:
+                    comment = f"Dengeli Konsolidasyon: 24s yatay bantta birikim, makas: {spread_bps:.1f} bps."
+                    tag = "NÖTR"
+                    tag_color = "slate"
+
+                # Lookup market cap rank from reference data
+                base_asset = symbol.split("/")[0] if "/" in symbol else symbol.replace("USDT", "")
+                cap_info = self._market_caps.get(base_asset, {})
+                coin_name = cap_info.get("name") or base_asset
+                market_cap = float(cap_info.get("market_cap") or 0.0)
+                rank = int(cap_info.get("rank") or 9999)
+
+                results.append({
+                    "symbol": symbol,
+                    "name": coin_name,
+                    "market_cap": market_cap,
+                    "rank": rank,
+                    "price": price,
+                    "bid": bid,
+                    "ask": ask,
+                    "spread": round(spread, 6),
+                    "spread_bps": round(spread_bps, 2),
+                    "change_24h_pct": round(change_pct, 2),
+                    "volume_24h": round(vol_usdt, 2),
+                    "high_24h": high_24h,
+                    "low_24h": low_24h,
+                    "commentary": comment,
+                    "tag": tag,
+                    "tag_color": tag_color,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+
+            # Sort by Market Cap rank (exact Binance "Top Tokens by Market Capitalization" sequence)
+            results.sort(key=lambda x: (x.get("rank", 9999), -x.get("volume_24h", 0.0)))
+            self._all_tickers_cache = results
+            self._all_tickers_ts = now_ts
+            return results
+        except Exception as e:
+            logger.error(f"Failed to fetch all Binance tickers: {e}")
+            return getattr(self, "_all_tickers_cache", [])
 
     async def get_orderbook(self, symbol: str, limit: int = 20) -> Optional[Dict[str, Any]]:
         """

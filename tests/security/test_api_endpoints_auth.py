@@ -6,33 +6,48 @@ from shared.config import get_settings
 
 
 @pytest.mark.asyncio
-async def test_mutating_endpoints_require_auth_when_enabled():
+async def test_mutating_endpoints_require_auth():
     settings = get_settings()
-    original_auth_state = settings.API_KEY_AUTH_ENABLED
+    transport = ASGITransport(app=app)
 
-    try:
-        # Enable authentication requirement
-        settings.API_KEY_AUTH_ENABLED = True
-        transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # All mutating operational endpoints must return 401 Unauthorized without auth
+        mutating_requests = [
+            ("POST", "/api/agent/start", {}),
+            ("POST", "/api/agent/stop", {}),
+            ("POST", "/api/agent/resume", {}),
+            ("POST", "/system/reset", {"confirmation": True}),
+            ("POST", "/system/emergency-shutdown", {}),
+            ("POST", "/api/risk/config", {"risk_per_trade_pct": 0.01}),
+            ("POST", "/risk/limits", {"risk_per_trade": 0.01}),
+            ("POST", "/orders", {"symbol": "BTC/USDT", "side": "BUY", "order_type": "MARKET", "quantity": 0.01}),
+            ("DELETE", "/orders/fake_order_id_123", {}),
+            ("POST", "/positions/BTCUSDT/close", {}),
+            ("POST", "/api/v1/trades/simulate", {"symbol": "BTC/USDT", "side": "BUY", "amount_usd": 100.0}),
+        ]
 
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            # 1. Calling /api/v1/trades/simulate without auth must return 401
-            res1 = await ac.post("/api/v1/trades/simulate", json={"symbol": "BTC/USDT", "side": "BUY", "amount_usd": 100.0})
-            assert res1.status_code == 401, f"Expected 401 Unauthorized but got {res1.status_code}"
+        for method, endpoint, payload in mutating_requests:
+            if method == "POST":
+                res = await ac.post(endpoint, json=payload if payload else None)
+            elif method == "DELETE":
+                res = await ac.delete(endpoint)
+            else:
+                res = await ac.request(method, endpoint, json=payload)
+            assert res.status_code == 401, f"Expected 401 Unauthorized for {method} {endpoint}, got {res.status_code}"
 
-            # 2. Calling /risk/limits without auth must return 401
-            res2 = await ac.post("/risk/limits", json={"risk_per_trade": 0.01})
-            assert res2.status_code == 401
+        # Test with invalid X-API-KEY
+        res_bad_key = await ac.post("/system/emergency-shutdown", headers={"X-API-KEY": "wrong_key"})
+        assert res_bad_key.status_code == 401
 
-            # 3. Calling /system/emergency-shutdown without auth must return 401
-            res3 = await ac.post("/system/emergency-shutdown")
-            assert res3.status_code == 401
+        # Test with invalid Bearer token
+        res_bad_bearer = await ac.post("/system/emergency-shutdown", headers={"Authorization": "Bearer wrong_token"})
+        assert res_bad_bearer.status_code == 401
 
-            # 4. Calling with valid X-API-KEY must succeed
-            headers = {"X-API-KEY": settings.API_ADMIN_KEY}
-            res4 = await ac.post("/system/emergency-shutdown", headers=headers)
-            assert res4.status_code == 200
-            assert res4.json()["status"] == "HALTED"
+        # Test with valid X-API-KEY header
+        res_valid_key = await ac.post("/system/emergency-shutdown", headers={"X-API-KEY": settings.API_ADMIN_KEY})
+        assert res_valid_key.status_code == 200
+        assert res_valid_key.json()["status"] == "HALTED"
 
-    finally:
-        settings.API_KEY_AUTH_ENABLED = original_auth_state
+        # Test with valid Bearer token
+        res_valid_bearer = await ac.post("/system/emergency-shutdown", headers={"Authorization": f"Bearer {settings.API_AUTH_SECRET}"})
+        assert res_valid_bearer.status_code == 200

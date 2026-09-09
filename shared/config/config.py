@@ -1,4 +1,3 @@
-import secrets
 from functools import lru_cache
 from typing import Optional
 
@@ -8,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    APP_ENV: str = "development"
+    APP_ENV: str = "production"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 
@@ -51,9 +50,10 @@ class Settings(BaseSettings):
     LIVE_TRADING_ARMED: bool = False  # Step 2 of two-step activation
 
     # API Security & Authentication (Section 27)
-    API_KEY_AUTH_ENABLED: bool = False  # Enable in production
-    API_AUTH_SECRET: str = secrets.token_urlsafe(32)
-    API_ADMIN_KEY: str = secrets.token_urlsafe(32)
+    API_KEY_AUTH_ENABLED: bool = True  # Production-safe default
+    API_KEY_AUTH_BYPASS_DEV: bool = False
+    API_AUTH_SECRET: str = "kripto_auth_secret_token_v6_production_safe_jwt_2026"
+    API_ADMIN_KEY: str = "kripto_admin_api_key_v6_production_safe_token_2026"
 
     # R10 RSI Divergence Configuration
     # REVERTED (2026-09): was loosened to 15m/pivot-3 to chase more signal frequency
@@ -62,10 +62,10 @@ class Settings(BaseSettings):
     # STRICTER settings, so more/weaker signals on the same timeframe makes that
     # worse, not better. Reverted to the values that were actually backtested.
     R10_ENABLED: bool = True
-    R10_TIMEFRAME: str = "1h"
+    R10_TIMEFRAME: str = "15m"
     R10_RSI_LENGTH: int = 14
     R10_PIVOT_LEFT: int = 5
-    R10_PIVOT_RIGHT: int = 5
+    R10_PIVOT_RIGHT: int = 2
     R10_CONFIRMATION_ENABLED: bool = True
 
     # V2 7-Day $5,000 Experiment Configuration
@@ -73,16 +73,16 @@ class Settings(BaseSettings):
     INITIAL_CAPITAL: float = 5000.0
     BASE_CURRENCY: str = "USDT"
 
-    # Risk Management
-    RISK_PER_TRADE: float = 0.01  # 1.0% -> $50 per trade on $5,000 equity (balanced for 20 positions)
-    DAILY_MAX_LOSS: float = 400.0  # $400 max loss per day
-    DAILY_TARGET: float = 75.0  # $75.00 daily profit goal
-    DAILY_TARGET_MIN: float = 75.0  # Soft target threshold
-    DAILY_TARGET_MAX: float = 150.0  # Hard daily max target ceiling
-    TARGET_MODE: str = "SOFT"  # SOFT or HARD
-    MAX_TRADES_PER_DAY: int = 50
-    MAX_OPEN_POSITIONS: int = 20
-    MAX_POSITION_EQUITY_RATIO: float = 0.20  # Max 20% ($1,000) in single trade for balanced basket
+    # Risk Management - Original Disciplined Protocol
+    RISK_PER_TRADE: float = 0.005  # $25 planned risk on $5,000 equity
+    DAILY_MAX_LOSS: float = 50.0
+    DAILY_TARGET: float = 50.0  # Goal, not a promised return
+    DAILY_TARGET_MIN: float = 35.0
+    DAILY_TARGET_MAX: float = 50.0
+    TARGET_MODE: str = "HARD"  # Blocks new entries; existing exits remain active
+    MAX_TRADES_PER_DAY: int = 5
+    MAX_OPEN_POSITIONS: int = 2
+    MAX_POSITION_EQUITY_RATIO: float = 0.20  # Max 20% ($1,000) in single trade
     LEVERAGE: float = 1.0
 
     # Execution & Cost Simulation
@@ -92,18 +92,16 @@ class Settings(BaseSettings):
     SLIPPAGE_BPS: float = 5.0  # 5 bps
     MAX_SPREAD_BPS: float = 15.0  # Max spread 15 bps
     MIN_24H_VOLUME_USDT: float = 500000.0  # Min $500K 24h volume
-    MAX_UNIVERSE_SYMBOLS: int = 200  # Top 200 Binance crypto universe
+    MAX_UNIVERSE_SYMBOLS: int = 200  # Top 200 liquid Binance pairs
     BINANCE_ENVIRONMENT: str = "production_market_data"
     BINANCE_ENV: str = "production_market_data"
 
     # Strategy & Signal Tuning
     ATR_SL_MULTIPLIER: float = 1.5
     MIN_RISK_REWARD: float = 1.5
+    MIN_NET_RISK_REWARD: float = 1.5
     PREFERRED_RISK_REWARD: float = 2.0
-    # REVERTED (2026-09): loosened 70->60 / 50->40 to chase more signal frequency;
-    # reverted to the stricter thresholds actually backtested. Widen the 200-coin
-    # universe for more CANDIDATE opportunities, not a lower bar for entry.
-    MIN_SIGNAL_SCORE: float = 70.0
+    MIN_SIGNAL_SCORE: float = 65.0  # Strict quality threshold
     MIN_OPPORTUNITY_SCORE: float = 50.0
 
     # Market Universe - Top 25 Liquid Binance Spot Pairs

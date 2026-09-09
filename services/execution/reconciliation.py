@@ -4,6 +4,7 @@ Detects state drift between local database/memory state and exchange (Binance) s
 Enforces fail-closed: if mismatch detected, raises alarm and flags RECONCILIATION_REQUIRED.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -175,6 +176,72 @@ class ReconciliationEngine:
                             local_state={"exists_locally": False},
                             exchange_state={"order_id": xid, "side": xorder.get("side"), "amount": xorder.get("amount")},
                             description=f"Exchange order {xid} exists on Binance but is not tracked locally!",
+                        )
+                    )
+
+            # 2. Query Exchange Balances if supported by client
+            balance_data: Dict[str, Any] = {}
+            if hasattr(client, "fetch_balance"):
+                try:
+                    res = client.fetch_balance()
+                    if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
+                        res = await res
+                    if isinstance(res, dict):
+                        balance_data = res
+                except Exception as b_err:
+                    logger.warning(f"Could not fetch exchange balances for reconciliation: {b_err}")
+
+            exchange_usdt_free = float(balance_data.get("USDT", {}).get("free", 0.0)) if isinstance(balance_data.get("USDT"), dict) else 0.0
+            exchange_total_balances = balance_data.get("total", {}) if isinstance(balance_data.get("total"), dict) else {}
+
+            # 3. Verify Protective Stop for every open position and asset quantity
+            for sym, pos in local_open_positions.items():
+                base_asset = sym.split("/")[0] if "/" in sym else sym.replace("USDT", "")
+                local_qty = float(getattr(pos, "quantity", 0.0) or (pos.get("quantity", 0.0) if isinstance(pos, dict) else 0.0))
+
+                # Check asset quantity on exchange if balance data is available
+                if exchange_total_balances and base_asset in exchange_total_balances:
+                    exchange_asset_qty = float(exchange_total_balances.get(base_asset, 0.0))
+                    if abs(local_qty - exchange_asset_qty) > max(0.0001, local_qty * 0.01):
+                        discrepancies.append(
+                            ReconciliationDiscrepancy(
+                                discrepancy_type="POSITION_QUANTITY_MISMATCH",
+                                symbol=sym,
+                                local_state={"quantity": local_qty},
+                                exchange_state={"exchange_asset_quantity": exchange_asset_qty},
+                                description=f"Quantity mismatch for {sym}: local={local_qty}, exchange={exchange_asset_qty}",
+                            )
+                        )
+
+                # Protective stop check on exchange
+                has_stop = any(
+                    str(o.get("symbol", "")).upper() == sym.upper()
+                    and str(o.get("side", "")).lower() == "sell"
+                    and "STOP" in str(o.get("type", "")).upper()
+                    for o in raw_exchange_orders
+                )
+                if not has_stop:
+                    discrepancies.append(
+                        ReconciliationDiscrepancy(
+                            discrepancy_type="MISSING_PROTECTIVE_STOP",
+                            symbol=sym,
+                            local_state={"symbol": sym, "stop_loss": getattr(pos, "stop_loss", None)},
+                            exchange_state={"has_protective_stop": False},
+                            description=f"Open position {sym} has NO exchange-side protective stop order!",
+                        )
+                    )
+
+            # 4. Check Cash Balance Drift if local engine exposes available_balance and exchange returned USDT balance
+            if balance_data and self.execution_engine and hasattr(self.execution_engine, "available_balance"):
+                local_cash = float(getattr(self.execution_engine, "available_balance", 0.0))
+                if abs(local_cash - exchange_usdt_free) > 1.00:
+                    discrepancies.append(
+                        ReconciliationDiscrepancy(
+                            discrepancy_type="BALANCE_DRIFT",
+                            symbol="USDT",
+                            local_state={"local_available_balance": local_cash},
+                            exchange_state={"exchange_usdt_free": exchange_usdt_free},
+                            description=f"USDT cash balance drift: local=${local_cash:.2f}, exchange=${exchange_usdt_free:.2f}",
                         )
                     )
 

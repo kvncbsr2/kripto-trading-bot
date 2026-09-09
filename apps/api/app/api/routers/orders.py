@@ -84,7 +84,10 @@ async def get_order_by_id(order_id: str):
     raise HTTPException(status_code=404, detail=f"Order {order_id} not found.")
 
 
+@router.delete("/orders/{order_id}")
+@router.delete("/api/v1/orders/{order_id}")
 @router.post("/orders/cancel/{order_id}")
+@router.post("/api/v1/orders/cancel/{order_id}")
 async def post_cancel_order(
     order_id: str,
     _role: Role = Depends(verify_api_key_or_token),
@@ -164,6 +167,8 @@ async def get_trades(limit: int = 50, db: AsyncSession = Depends(get_async_db)):
     return trade_list[:limit]
 
 
+@router.post("/orders")
+@router.post("/api/v1/orders")
 @router.post("/api/v1/trades/simulate")
 @router.post("/api/v1/orders/paper/execute")
 @router.post("/orders/paper/execute")
@@ -230,7 +235,7 @@ async def post_simulate_trade(
         direction=SignalDirection.LONG if is_buy else SignalDirection.SHORT,
         entry_price=live_price,
         stop_price=round(live_price * 0.98, 4 if live_price < 10 else 2),
-        take_profit=round(live_price * 1.04, 4 if live_price < 10 else 2),
+        take_profit=round(live_price + (abs(live_price - round(live_price * 0.98, 4 if live_price < 10 else 2)) * 2.1), 4 if live_price < 10 else 2),
         confidence=0.9,
     )
 

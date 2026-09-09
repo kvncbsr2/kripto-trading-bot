@@ -12,6 +12,9 @@ from apps.api.app.api.routers.experiments import router as experiments_router
 from apps.api.app.api.routers.health import router as health_router
 from apps.api.app.api.routers.market import router as market_router
 from apps.api.app.api.routers.orders import router as orders_router
+from apps.api.app.api.routers.agents_hub import router as agents_hub_router
+from apps.api.app.api.routers.intelligence import router as intelligence_router
+from apps.api.app.api.routers.news import router as news_router
 from apps.api.app.api.routers.positions import router as positions_router
 from apps.api.app.api.routers.risk import router as risk_router
 from apps.api.app.api.routers.scanner import router as scanner_router
@@ -31,7 +34,7 @@ from apps.api.app.api.state import (
 
 router = APIRouter()
 
-# Mount all 14 modular routers
+# Mount all 15 modular routers
 router.include_router(health_router)
 router.include_router(system_router)
 router.include_router(market_router)
@@ -46,6 +49,8 @@ router.include_router(discovery_router)
 router.include_router(experiments_router)
 router.include_router(binance_router)
 router.include_router(agents_hub_router)
+router.include_router(news_router)
+router.include_router(intelligence_router)
 
 __all__ = [
     "router",

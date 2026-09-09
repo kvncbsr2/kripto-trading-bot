@@ -70,15 +70,24 @@ pip install -e ".[dev]"
 python -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 3. Canonical Next.js Dashboard Başlatma
-```bash
-cd apps/dashboard
-npm install
-npm run dev
-```
+### 3. Dashboard Seçenekleri
+Sistem iki farklı kontrol paneli arabirimini tam uyumlu olarak destekler:
 
-Dashboard & Servis Linkleri:
-* **Canonical Next.js Dashboard**: [http://localhost:3000](http://localhost:3000)
+1. **Dahili Tek-Sayfa Kontrol Paneli (Hafif / Sıfır Bağımlılık)**:
+   * Node.js/npm gerektirmez, doğrudan FastAPI tarafından servis edilir.
+   * Tek tıkla `start.bat` çalıştırıldığında tarayıcıda otomatik açılır: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
+2. **Kanonik Next.js Dashboard (Gelişmiş React Web UI)**:
+   * Modern TypeScript/Tailwind mimarisi:
+   ```bash
+   cd apps/dashboard
+   npm install
+   npm run dev
+   ```
+   * Adres: [http://localhost:3000](http://localhost:3000)
+
+### 4. Servis & API Linkleri
+* **Dahili Kontrol Merkezi**: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
+* **Kanonik Next.js Paneli**: [http://localhost:3000](http://localhost:3000)
 * **API Swagger Dokümantasyonu**: [http://localhost:8000/docs](http://localhost:8000/docs)
 * **Sağlık & Hazırlık Kontrolü**: [http://localhost:8000/health](http://localhost:8000/health)
 * **Prometheus Metrikleri**: [http://localhost:8000/metrics](http://localhost:8000/metrics)

@@ -105,10 +105,13 @@ async def get_data_quality(symbol: str):
 @router.get("/api/v1/market/live-tickers")
 async def get_live_market_tickers():
     """
-    Returns REAL-TIME Binance live market tickers with ZERO fake data.
+    Returns REAL-TIME Binance live market tickers for ALL USDT pairs with ZERO fake data.
     """
-    tickers = await market_data_service.get_live_tickers(settings.DEFAULT_SYMBOLS)
-    ticker_list = tickers if isinstance(tickers, list) else list(tickers.values())
+    all_tickers = await market_data_service.get_all_binance_tickers()
+    if not all_tickers:
+        all_tickers = await market_data_service.get_live_tickers(settings.DEFAULT_SYMBOLS)
+
+    ticker_list = all_tickers if isinstance(all_tickers, list) else list(all_tickers.values())
     return {
         "market_source": "BINANCE_REALTIME",
         "environment": settings.BINANCE_ENV,

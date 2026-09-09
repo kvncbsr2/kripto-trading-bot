@@ -41,6 +41,8 @@ class FeatureEngine:
         df.reset_index(drop=True, inplace=True)
         return df
 
+
+
     @classmethod
     def compute_features(cls, candles: List[Candle]) -> pd.DataFrame:
         df = cls.candles_to_dataframe(candles)

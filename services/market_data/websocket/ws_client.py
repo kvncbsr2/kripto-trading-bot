@@ -73,12 +73,17 @@ class BinanceWebSocketClient:
                     else symbol_raw
                 )
 
+                # Strict anti-lookahead: Only emit closed candles (x=True)
+                is_closed = bool(kline.get("x", False))
+                if not is_closed:
+                    return
+
                 candle_ts = normalize_timestamp(kline["t"])
-                # Out of order or duplicate check
+                # Out of order or duplicate check (timestamp must strictly advance)
                 last_ts = self._last_candle_ts.get(symbol)
-                if last_ts and candle_ts < last_ts:
-                    logger.warning(
-                        f"Out of order candle received for {symbol}: {candle_ts} < {last_ts}"
+                if last_ts and candle_ts <= last_ts:
+                    logger.debug(
+                        f"Duplicate or out of order closed candle ignored for {symbol}: {candle_ts} <= {last_ts}"
                     )
                     return
 
@@ -95,7 +100,9 @@ class BinanceWebSocketClient:
                     volume=float(kline["v"]),
                     quote_volume=float(kline["q"]),
                     exchange=ExchangeName.BINANCE,
+                    is_closed=True,
                 )
+
 
                 for cb in self.callbacks:
                     if asyncio.iscoroutinefunction(cb):

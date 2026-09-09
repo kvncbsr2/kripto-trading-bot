@@ -1,5 +1,10 @@
 import asyncio
+import json
+import os
+import time
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import pandas as pd
@@ -10,16 +15,47 @@ from services.market_data.market_data_service import MarketDataService
 from services.notification_service.telegram_service import telegram_service
 from services.risk_engine.btc_regime_shield import btc_regime_shield
 from services.risk_engine.risk_engine import RiskEngine
+from services.signal_engine.scorer import SignalScorer
 from services.strategy_engine.strategies.r10_rsi_divergence import (
     R10RSIDivergenceStrategy,
     create_r10_strategy_from_settings,
 )
+from services.strategy_engine.strategies.regime_gated_pullback import RegimeGatedPullbackStrategy
 from shared.config import get_settings
-from shared.enums import PositionStatus, SignalDirection
+from shared.enums import MarketRegime, PositionStatus, SignalDirection, TradingWorkerState
 from shared.logging import add_system_log, get_logger
 
 logger = get_logger("autonomous-trader", service="autonomous_trader")
 settings = get_settings()
+
+_ACTIVE_RUNNER_INSTANCE = None
+_LOCK_FILE = Path("kripto_agent_worker.lock")
+
+
+def _is_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        import psutil
+        return psutil.pid_exists(pid)
+    except Exception:
+        pass
+    try:
+        import sys
+        if sys.platform == "win32":
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            SYNCHRONIZE = 0x00100000
+            proc = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+            if proc != 0:
+                kernel32.CloseHandle(proc)
+                return True
+            return False
+        else:
+            os.kill(pid, 0)
+            return True
+    except (OSError, PermissionError):
+        return False
 
 WATCH_SYMBOLS = list(getattr(settings, "DEFAULT_SYMBOLS", [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT",
@@ -72,17 +108,24 @@ class AutonomousPaperTrader:
             risk_per_trade=settings.RISK_PER_TRADE,
             max_trades_per_day=settings.MAX_TRADES_PER_DAY,
             max_position_equity_ratio=getattr(settings, "MAX_POSITION_EQUITY_RATIO", 0.40),
+            min_risk_reward=getattr(settings, "MIN_RISK_REWARD", 1.5),
+            target_mode=getattr(settings, "TARGET_MODE", "SOFT"),
+            daily_target_min=getattr(settings, "DAILY_TARGET_MIN", 50.0),
+            daily_target_max=getattr(settings, "DAILY_TARGET_MAX", 100.0),
         )
         self.strategy = create_r10_strategy_from_settings()
+        self.pullback_strategy = None
         self.feature_engine = FeatureEngine()
 
-        # Requirement 4: Starts in OFF state by default
+        # Authoritative State Machine (P0-001)
+        self.worker_state: TradingWorkerState = TradingWorkerState.STOPPED
         self.is_active: bool = False
         self.cycle_interval: int = _cycle_interval_for_timeframe(settings.R10_TIMEFRAME)
         self.cycle_count: int = 0
         self.last_cycle_at: Optional[str] = None
-        self.last_action: str = "Otonom motor beklemede (OFF). Kullanıcı başlatması bekleniyor."
+        self.last_action: str = "Otonom motor beklemede (STOPPED)."
         self._task: Optional[asyncio.Task] = None
+        self._lock_token: Optional[str] = None
 
     def bind_command_bus(self, command_bus_instance):
         self.command_bus = command_bus_instance
@@ -90,6 +133,8 @@ class AutonomousPaperTrader:
             r10 = next((s for s in command_bus_instance.strategy_manager.strategies if s.name == "r10_rsi_divergence"), None)
             if r10:
                 self.strategy = r10
+            # Pullback strategy disabled in standard protocol
+            self.pullback_strategy = None
 
     def bind_market_data_service(self, market_data_service: MarketDataService):
         self.market_data_service = market_data_service
@@ -100,23 +145,195 @@ class AutonomousPaperTrader:
         return self.market_data_service
 
     def start(self):
+        if self.worker_state == TradingWorkerState.RUNNING:
+            raise RuntimeError("Duplicate worker start is rejected: Trading worker loop is already RUNNING.")
+        if self.worker_state == TradingWorkerState.EMERGENCY_STOP:
+            raise RuntimeError("Emergency stop is active: Trading worker cannot start until reset.")
+
+        global _ACTIVE_RUNNER_INSTANCE
+        if _ACTIVE_RUNNER_INSTANCE is not None and _ACTIVE_RUNNER_INSTANCE.worker_state == TradingWorkerState.RUNNING and _ACTIVE_RUNNER_INSTANCE is not self:
+            raise RuntimeError("Only one trading loop can run at a time: another loop is already active.")
+
+        # Inter-process atomic lock acquisition (P0-001)
+        self._lock_token = self._acquire_worker_lock()
+
+        self.worker_state = TradingWorkerState.STARTING
         self.is_active = True
         self.last_action = "Otonom motor aktif. Gerçek piyasa taranıyor."
+        self.worker_state = TradingWorkerState.RUNNING
+        _ACTIVE_RUNNER_INSTANCE = self
+        self._sync_runtime_state()
+
         add_system_log("▶️ OTONOM BOT BAŞLATILDI: Canlı Binance Spot kline/fiyat taraması aktif.", level="SUCCESS", service="runner")
-        asyncio.create_task(telegram_service.notify_bot_started(5000.0))
+        try:
+            asyncio.get_running_loop().create_task(
+                telegram_service.notify_bot_started(settings.INITIAL_CAPITAL)
+            )
+        except RuntimeError:
+            logger.debug("Skipped start notification because no event loop is running.")
         if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._run_loop())
-            logger.info("Autonomous Paper Trader loop started (ACTIVE).")
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                logger.debug("Skipped worker task because no event loop is running.")
+            else:
+                self._task = loop.create_task(self._run_loop())
+                logger.info("Autonomous Paper Trader loop started (RUNNING).")
 
     def stop(self):
+        if self.worker_state == TradingWorkerState.STOPPED:
+            return
+        self.worker_state = TradingWorkerState.STOPPING
         self.is_active = False
-        self.last_action = "Otonom motor durduruldu (OFF)."
+        self.last_action = "Otonom motor durduruldu (STOPPED)."
+        self._release_worker_lock(self._lock_token)
+        self._lock_token = None
+        global _ACTIVE_RUNNER_INSTANCE
+        if _ACTIVE_RUNNER_INSTANCE is self:
+            _ACTIVE_RUNNER_INSTANCE = None
+        self.worker_state = TradingWorkerState.STOPPED
+        self._sync_runtime_state()
+
         add_system_log("⏹️ OTONOM BOT DURDURULDU: Alım-satım taraması duraklatıldı.", level="WARNING", service="runner")
-        asyncio.create_task(telegram_service.notify_bot_stopped())
+        try:
+            asyncio.get_running_loop().create_task(telegram_service.notify_bot_stopped())
+        except RuntimeError:
+            logger.debug("Skipped stop notification because no event loop is running.")
         if self._task and not self._task.done():
             self._task.cancel()
             self._task = None
-            logger.info("Autonomous Paper Trader loop stopping (INACTIVE).")
+            logger.info("Autonomous Paper Trader loop stopping (STOPPED).")
+
+    def pause(self):
+        if self.worker_state != TradingWorkerState.RUNNING:
+            return
+        self.worker_state = TradingWorkerState.PAUSED
+        self.is_active = False
+        self.last_action = "Otonom motor duraklatıldı (PAUSED)."
+        self._sync_runtime_state()
+        add_system_log("⏸️ OTONOM BOT DURAKLATILDI (PAUSED).", level="INFO", service="runner")
+
+    def resume(self):
+        if self.worker_state == TradingWorkerState.EMERGENCY_STOP:
+            raise RuntimeError("Cannot resume from EMERGENCY_STOP. Call reset_state() first.")
+        if self.worker_state == TradingWorkerState.RUNNING:
+            return
+        self.worker_state = TradingWorkerState.RUNNING
+        self.is_active = True
+        self.last_action = "Otonom motor devam ettirildi (RUNNING)."
+        self._sync_runtime_state()
+        add_system_log("▶️ OTONOM BOT DEVAM ETTİRİLDİ (RUNNING).", level="SUCCESS", service="runner")
+
+    def emergency_stop(self, reason: str = "Acil durum emri verildi."):
+        self.worker_state = TradingWorkerState.EMERGENCY_STOP
+        self.is_active = False
+        self.last_action = f"🚨 ACİL DURDURMA: {reason}"
+        self._release_worker_lock(self._lock_token)
+        self._lock_token = None
+        global _ACTIVE_RUNNER_INSTANCE
+        if _ACTIVE_RUNNER_INSTANCE is self:
+            _ACTIVE_RUNNER_INSTANCE = None
+        if self._task and not self._task.done():
+            self._task.cancel()
+            self._task = None
+        if self.command_bus and getattr(self.command_bus, "broker", None):
+            self.command_bus.broker.emergency_close_all()
+        self._sync_runtime_state()
+        add_system_log(f"🚨 ACİL DURDURMA TETİKLENDİ: {reason}", level="ERROR", service="risk")
+
+    def reset_state(self):
+        """Allows recovering from EMERGENCY_STOP or ERROR back to clean STOPPED state."""
+        self._release_worker_lock(self._lock_token)
+        self._lock_token = None
+        global _ACTIVE_RUNNER_INSTANCE
+        if _ACTIVE_RUNNER_INSTANCE is self:
+            _ACTIVE_RUNNER_INSTANCE = None
+        self.worker_state = TradingWorkerState.STOPPED
+        self.is_active = False
+        self.last_action = "Otonom motor sıfırlandı ve hazır (STOPPED)."
+        self._sync_runtime_state()
+
+    @classmethod
+    def _acquire_worker_lock(cls) -> str:
+        """
+        Atomically acquires process-level worker lock using OS atomic file creation (O_CREAT | O_EXCL).
+        Detects stale locks from crashed processes and recovers safely.
+        Returns a unique lock token for ownership verification.
+        """
+        current_pid = os.getpid()
+        token = str(uuid.uuid4())
+        payload = json.dumps({
+            "pid": current_pid,
+            "owner_token": token,
+            "timestamp": time.time(),
+        })
+
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        try:
+            fd = os.open(str(_LOCK_FILE), flags)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(payload)
+            return token
+        except FileExistsError:
+            pass
+
+        # Inspect existing lock
+        existing_pid = -1
+        try:
+            content = _LOCK_FILE.read_text(encoding="utf-8").strip()
+            data = json.loads(content)
+            existing_pid = int(data.get("pid", -1))
+        except Exception:
+            try:
+                existing_pid = int(content)
+            except Exception:
+                existing_pid = -1
+
+        if existing_pid == current_pid:
+            try:
+                _LOCK_FILE.write_text(payload, encoding="utf-8")
+            except Exception:
+                pass
+            return token
+
+        if existing_pid > 0 and _is_pid_alive(existing_pid):
+            raise RuntimeError(
+                f"Only one trading loop can run at a time: another loop is already active in process PID {existing_pid}."
+            )
+
+        # Stale lock from deceased process -> clean and retry
+        logger.warning(f"Removing stale worker lock from deceased PID {existing_pid}")
+        try:
+            _LOCK_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        try:
+            fd = os.open(str(_LOCK_FILE), flags)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(payload)
+            return token
+        except FileExistsError:
+            raise RuntimeError("Only one trading loop can run at a time: lock acquired by another process.")
+
+    @classmethod
+    def _release_worker_lock(cls, token: Optional[str] = None):
+        if not _LOCK_FILE.exists():
+            return
+        try:
+            content = _LOCK_FILE.read_text(encoding="utf-8").strip()
+            data = json.loads(content)
+            existing_pid = int(data.get("pid", -1))
+            existing_token = data.get("owner_token")
+            if existing_pid == os.getpid():
+                if token is None or existing_token == token:
+                    _LOCK_FILE.unlink(missing_ok=True)
+        except Exception:
+            try:
+                if int(content) == os.getpid():
+                    _LOCK_FILE.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     async def _run_loop(self):
         await asyncio.sleep(1)
@@ -192,6 +409,22 @@ class AutonomousPaperTrader:
                     logger.warning(f"Failed to fetch live price for open position {symbol}: {e}")
 
         # ---------------------------------------------------------------------
+        # 1.5 Mathematical Expectancy Circuit Breaker ("Negatife dönerse hemen dur")
+        # ---------------------------------------------------------------------
+        closed_history = getattr(broker, "closed_positions_history", [])
+        exp_tripped, exp_reason, _ = self.risk_engine.circuit_breaker.check_expectancy(closed_history)
+
+        if exp_tripped:
+            halt_msg = f"🛑 {exp_reason}"
+            self.last_action = halt_msg
+            self.is_active = False
+            runtime_state["circuit_state"] = "EXPECTANCY_HALTED"
+            runtime_state["is_autonomous_active"] = False
+            add_system_log(halt_msg, level="ERROR", service="risk")
+            self._sync_runtime_state()
+            return {"action": "EXPECTANCY_HALTED", "reason": exp_reason}
+
+        # ---------------------------------------------------------------------
         # 2. Evaluate Strategy and Risk Engine for New Positions
         # ---------------------------------------------------------------------
         open_count = len(broker.open_positions)
@@ -202,10 +435,11 @@ class AutonomousPaperTrader:
             self._sync_runtime_state()
             return {"action": "MONITORING_MAX_CAPACITY", "open_positions": open_count}
 
-        if not getattr(self.strategy, "enabled", True):
-            self.last_action = f"Strateji ({self.strategy.name}) devre dışı. Sadece açık pozisyonlar izleniyor."
+        r10_enabled = getattr(self.strategy, "enabled", True)
+        if not r10_enabled:
+            self.last_action = "R10 RSI Divergence stratejisi devre dışı. Sadece açık pozisyonlar izleniyor."
             add_system_log(
-                f"⏸️ Strateji ({self.strategy.name}) devre dışı. Yeni sinyal taranmıyor, mevcut {open_count} pozisyon izleniyor.",
+                f"⏸️ R10 Stratejisi devre dışı. Yeni sinyal taranmıyor, mevcut {open_count} pozisyon izleniyor.",
                 level="INFO",
                 service="runner",
             )
@@ -261,7 +495,41 @@ class AutonomousPaperTrader:
                         for c in candles
                     ]
                     df = pd.DataFrame(records)
-                    sig = self.strategy.evaluate_from_dataframe(df, symbol=sym)
+                    sig = None
+                    if r10_enabled:
+                        sig = self.strategy.evaluate_from_dataframe(df, symbol=sym)
+
+                    # Compute Opportunity Score hard gate (P1-005)
+                    if sig:
+                        from services.signal_engine.scorer import SignalScorer
+                        from shared.schemas import FeatureVector, MarketRegimeState
+                        vol_mean = df["volume"].rolling(20).mean().iloc[-1] if len(df) >= 20 else 1.0
+                        vol_ratio = float(df["volume"].iloc[-1] / vol_mean) if vol_mean > 0 else 1.0
+                        ind = {
+                            "adx": float(df["adx"].iloc[-1]) if "adx" in df.columns and not pd.isna(df["adx"].iloc[-1]) else 25.0,
+                            "volume_ratio": vol_ratio,
+                            "bb_bandwidth": 0.04,
+                            "bullish_divergence": 1.0 if sig.direction == SignalDirection.LONG else 0.0,
+                            "bearish_divergence": 1.0 if sig.direction == SignalDirection.SHORT else 0.0,
+                        }
+                        features = FeatureVector(
+                            symbol=sym,
+                            timestamp=candles[-1].timestamp if candles else datetime.now(timezone.utc),
+                            timeframe=scan_timeframe,
+                            indicators=ind,
+                        )
+                        regime_state = MarketRegimeState(
+                            regime=MarketRegime.TRENDING_BULL if sig.direction == SignalDirection.LONG else MarketRegime.RANGING
+                        )
+                        opp_score, opp_label = SignalScorer.calculate_opportunity_score(features, regime_state)
+                        sig.opportunity_score = opp_score
+                        sig.metadata["opportunity_score"] = opp_score
+                        sig.metadata["opportunity_label"] = opp_label
+
+                        min_opp = runtime_state.get("min_opportunity_score", getattr(settings, "MIN_OPPORTUNITY_SCORE", 50.0))
+                        if opp_score < min_opp:
+                            sig = None  # Hard gate rejection
+
                     last_p = float(candles[-1].close) if candles else 0.0
                     rsi_val = float(df["rsi"].iloc[-1]) if "rsi" in df.columns and not pd.isna(df["rsi"].iloc[-1]) else 50.0
 
@@ -302,8 +570,9 @@ class AutonomousPaperTrader:
             for sym, sig, candle_ts, last_p in confirmed_signals:
                 sig_price = getattr(sig, "entry_price", last_p)
                 price_str = f"${sig_price:,.4f}" if sig_price < 1.0 else f"${sig_price:,.2f}"
+                strat_tag = getattr(sig, "strategy", "STRATEGY").upper()
                 add_system_log(
-                    f"🎯 {sym}: R10 {sig.direction.value} SİNYALİ TESPİT EDİLDİ! Fiyat: {price_str} | Güven: {sig.confidence:.2f} | {sig.reason}",
+                    f"🎯 {sym}: {strat_tag} {sig.direction.value} SİNYALİ TESPİT EDİLDİ! Fiyat: {price_str} | Güven: {sig.confidence:.2f} | {sig.reason}",
                     level="SUCCESS",
                     service="strategy"
                 )
@@ -329,6 +598,7 @@ class AutonomousPaperTrader:
                     signal=sig,
                     portfolio=portfolio_state,
                     latest_market_time=datetime.now(timezone.utc),
+                    closed_positions=closed_history,
                 )
 
                 if decision.approved:
@@ -392,6 +662,17 @@ class AutonomousPaperTrader:
         runtime_state["last_cycle_at"] = self.last_cycle_at
         runtime_state["last_action"] = self.last_action
         runtime_state["is_autonomous_active"] = self.is_active
+        runtime_state["worker_state"] = self.worker_state.value
+        if self.worker_state == TradingWorkerState.RUNNING:
+            runtime_state["system_state"] = "TRADING"
+            runtime_state["is_halted"] = False
+        elif self.worker_state == TradingWorkerState.EMERGENCY_STOP:
+            runtime_state["system_state"] = "EMERGENCY_SHUTDOWN"
+            runtime_state["is_halted"] = True
+            runtime_state["circuit_state"] = "LOCKED"
+        elif self.worker_state == TradingWorkerState.STOPPED:
+            if runtime_state.get("system_state") == "TRADING":
+                runtime_state["system_state"] = "READY"
 
 
 autonomous_trader = AutonomousPaperTrader()

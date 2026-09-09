@@ -26,11 +26,16 @@ async def verify_api_key_or_token(
     auth_cred: Optional[HTTPAuthorizationCredentials] = Security(security_bearer),
 ) -> Role:
     """
-    Verifies API Key or Bearer token for mutating operational routes (AUDIT-09).
-    If API_KEY_AUTH_ENABLED is False (development/local test suite), returns Role.ADMIN.
-    In production (API_KEY_AUTH_ENABLED=True), rejects missing or invalid credentials with 401/403.
+    Verifies API Key or Bearer token for mutating operational routes (P0-002).
+    Default: API_KEY_AUTH_ENABLED=True.
+    Bypass is strictly allowed ONLY when APP_ENV == "development" AND API_KEY_AUTH_BYPASS_DEV == True.
+    In all other cases, requests without valid credentials return 401 Unauthorized.
     """
-    if not getattr(settings, "API_KEY_AUTH_ENABLED", False):
+    is_dev = getattr(settings, "APP_ENV", "production").lower() == "development"
+    dev_bypass = getattr(settings, "API_KEY_AUTH_BYPASS_DEV", False) is True
+    auth_enabled = getattr(settings, "API_KEY_AUTH_ENABLED", True)
+
+    if not auth_enabled and is_dev and dev_bypass:
         return Role.ADMIN
 
     # 1. Check Bearer token
@@ -53,6 +58,18 @@ async def verify_api_key_or_token(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key.",
+        )
+
+    # 3. Check Cookie (for authenticated web dashboard sessions)
+    cookie_token = request.cookies.get("kripto_admin_token")
+    if cookie_token:
+        clean_cookie = cookie_token.strip()
+        if any(secrets.compare_digest(clean_cookie, expected) for expected in (settings.API_ADMIN_KEY, settings.API_AUTH_SECRET)):
+            return Role.ADMIN
+        logger.warning("Invalid admin cookie token received.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session token.",
         )
 
     logger.warning(f"Unauthenticated request to protected endpoint: {request.url.path}")

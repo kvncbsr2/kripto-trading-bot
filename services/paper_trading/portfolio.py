@@ -1,12 +1,15 @@
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
+from shared.config import get_settings
 from shared.enums import PositionSide, PositionStatus
 from shared.schemas import PortfolioState, Position
 
 
 class PortfolioTracker:
-    def __init__(self, initial_balance: float = 10000.0):
+    def __init__(self, initial_balance: Optional[float] = None):
+        if initial_balance is None:
+            initial_balance = getattr(get_settings(), "INITIAL_CAPITAL", 5000.0)
         self.initial_balance = initial_balance
         self.balance = initial_balance
         self.positions: Dict[str, Position] = {}  # symbol -> active Position

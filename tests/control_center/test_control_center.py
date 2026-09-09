@@ -12,7 +12,11 @@ async def client():
     from apps.api.app.api.state import RUNTIME_STATE
     RUNTIME_STATE["is_halted"] = False
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-API-KEY": settings.API_ADMIN_KEY},
+    ) as ac:
         yield ac
 
 
@@ -103,12 +107,29 @@ async def test_risk_config_update(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_scanner_run_action(client: AsyncClient):
-    res = await client.post("/api/scanner/run")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["success"] is True
-    assert data["scanned_count"] > 0
-    assert len(data["opportunities"]) > 0
+    from unittest.mock import AsyncMock, patch
+    mock_tickers = [
+        {
+            "symbol": "BTC/USDT",
+            "price": 60000.0,
+            "bid": 59990.0,
+            "ask": 60010.0,
+            "volume_24h": 50000000.0,
+            "spread_bps": 3.33,
+            "high_24h": 61000.0,
+            "low_24h": 59000.0,
+        }
+    ]
+    with patch(
+        "apps.api.app.api.routers.scanner.market_data_service.get_live_tickers",
+        new=AsyncMock(return_value=mock_tickers),
+    ):
+        res = await client.post("/api/scanner/run")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["success"] is True
+        assert data["scanned_count"] > 0
+        assert len(data["opportunities"]) > 0
 
 
 @pytest.mark.asyncio
@@ -157,6 +178,16 @@ async def test_vectorbt_backtest_endpoint(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_monte_carlo_endpoint(client: AsyncClient):
+    from types import SimpleNamespace
+    from apps.api.app.api.state import command_bus
+    if command_bus.broker:
+        command_bus.broker.closed_positions_history = [
+            SimpleNamespace(realized_pnl=25.0),
+            SimpleNamespace(realized_pnl=-15.0),
+            SimpleNamespace(realized_pnl=30.0),
+            SimpleNamespace(realized_pnl=-10.0),
+            SimpleNamespace(realized_pnl=45.0),
+        ]
     res = await client.post("/api/monte-carlo/run")
     assert res.status_code == 200
     data = res.json()

@@ -161,7 +161,16 @@ class DataQualityEngine:
         return QualityCheckResult(passed=True, severity=QualitySeverity.OK)
 
     def validate_spread(self, symbol: str, bid: float, ask: float) -> QualityCheckResult:
-        if bid <= 0 or ask <= 0:
+        if (
+            bid is None
+            or ask is None
+            or math.isnan(bid)
+            or math.isnan(ask)
+            or math.isinf(bid)
+            or math.isinf(ask)
+            or bid <= 0
+            or ask <= 0
+        ):
             return QualityCheckResult(
                 passed=False,
                 severity=QualitySeverity.LOCK,
@@ -179,7 +188,7 @@ class DataQualityEngine:
             )
 
         spread_bps = ((ask - bid) / ask) * 10000.0
-        if spread_bps > self.max_allowed_spread_bps:
+        if math.isnan(spread_bps) or math.isinf(spread_bps) or spread_bps > self.max_allowed_spread_bps:
             logger.warning(
                 f"DATA_QUALITY_WARNING: Spread anomaly on {symbol} ({spread_bps:.1f} bps > {self.max_allowed_spread_bps} bps)"
             )

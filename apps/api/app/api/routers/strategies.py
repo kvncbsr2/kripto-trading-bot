@@ -19,6 +19,7 @@ KNOWN_STRATEGIES = {
         "family": "R10_DIVERGENCE",
         "description": "Strictly causal RSI divergence with T+5 bar confirmation window and ATR-based stops.",
         "enabled": True,
+        "status": "ACTIVE",
         "timeframe": "15m",
     },
     "trend_following": {
@@ -26,6 +27,7 @@ KNOWN_STRATEGIES = {
         "family": "TREND",
         "description": "EMA ribbon trend alignment with dynamic trailing lock.",
         "enabled": False,
+        "status": "DEPRECATED",
         "timeframe": "1h",
     },
     "mean_reversion": {
@@ -33,6 +35,7 @@ KNOWN_STRATEGIES = {
         "family": "MEAN_REVERSION",
         "description": "Mean reversion from extreme volatility bands.",
         "enabled": False,
+        "status": "DEPRECATED",
         "timeframe": "15m",
     },
 }

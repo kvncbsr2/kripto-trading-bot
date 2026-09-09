@@ -132,19 +132,28 @@ class BinanceLiveExecutionEngine(ExecutionEngine):
             logger.error(f"Live Binance order submission failed for {decision.symbol}: {e}")
             raise
 
+        raw_status = str(raw_res.get("status") or raw_res.get("info", {}).get("status") or "").upper()
+        if raw_status in {"REJECTED", "CANCELED", "EXPIRED"}:
+            raise RuntimeError(f"Live Binance order was {raw_status}: {raw_res}")
+
         binance_order_id = str(raw_res.get("id"))
         fill_price = float(raw_res.get("average") or raw_res.get("price") or norm_price)
-        filled_qty = float(raw_res.get("filled") or norm_qty)
+        filled_qty = float(raw_res.get("filled") or raw_res.get("executedQty") or (norm_qty if raw_status in {"FILLED", "CLOSED"} else 0.0))
         fee_cost = float(raw_res.get("fee", {}).get("cost", 0.0)) if raw_res.get("fee") else 0.0
+
+        if filled_qty <= 0:
+            raise RuntimeError(f"Live Binance order produced zero filled quantity (status={raw_status})")
+
+        order_status = OrderStatus.FILLED if (filled_qty >= norm_qty or raw_status in {"FILLED", "CLOSED"}) else OrderStatus.PARTIALLY_FILLED
 
         order = Order(
             order_id=binance_order_id,
             symbol=decision.symbol,
             order_type=OrderType.MARKET,
             side=OrderSide.BUY,
-            quantity=filled_qty,
+            quantity=norm_qty,
             price=fill_price,
-            status=OrderStatus.FILLED,
+            status=order_status,
             filled_quantity=filled_qty,
             average_fill_price=fill_price,
             fee_paid=fee_cost,
@@ -181,29 +190,42 @@ class BinanceLiveExecutionEngine(ExecutionEngine):
             strategy=strategy_name,
             opened_at=now,
             peak_price=fill_price,
+            fees_paid=fee_cost,
         )
 
         # 2. INVARIANT P0-RISK-002: Submit Exchange-Side Protective Stop
         stop_client_id = f"ks_{uuid.uuid4().hex[:16]}"
+        spec = symbol_filter_engine.filters.get(decision.symbol, {})
+        tick_size = spec.get("tick_size", 0.01 if decision.stop_loss >= 1.0 else 0.0001)
+        step_size = spec.get("step_size", 0.0001)
+
+        norm_stop_price = symbol_filter_engine.round_to_tick_size(decision.stop_loss, tick_size)
+        norm_limit_price = symbol_filter_engine.round_to_tick_size(decision.stop_loss * 0.999, tick_size)
+        norm_stop_qty = symbol_filter_engine.round_to_step_size(filled_qty, step_size)
+
         try:
             logger.info(
-                f"Submitting LIVE Exchange-Side Protective Stop on Binance: {decision.symbol} STOP_LOSS_LIMIT @ ${decision.stop_loss:.2f}"
+                f"Submitting LIVE Exchange-Side Protective Stop on Binance: {decision.symbol} "
+                f"STOP_LOSS_LIMIT @ ${norm_stop_price} (limit: ${norm_limit_price}, qty: {norm_stop_qty})"
             )
             # Binance Spot STOP_LOSS_LIMIT order: stopPrice triggers order at limit price
             stop_res = await self.client.create_order(
                 symbol=decision.symbol,
                 type="STOP_LOSS_LIMIT",
                 side="sell",
-                amount=filled_qty,
-                price=round(decision.stop_loss * 0.999, 4),  # Limit slightly below trigger to ensure execution
+                amount=norm_stop_qty,
+                price=norm_limit_price,
                 params={
-                    "stopPrice": decision.stop_loss,
+                    "stopPrice": norm_stop_price,
                     "newClientOrderId": stop_client_id,
                     "timeInForce": "GTC",
                 },
             )
-            stop_order_id = str(stop_res.get("id"))
-            logger.info(f"Exchange-Side Protective Stop ACCEPTED by Binance: ID={stop_order_id}")
+            stop_order_id = str(stop_res.get("id") or "")
+            stop_status = str(stop_res.get("status") or stop_res.get("info", {}).get("status") or "").upper()
+            if not stop_order_id or stop_status in {"REJECTED", "CANCELED", "EXPIRED"}:
+                raise RuntimeError(f"Protective stop rejected by Binance: id={stop_order_id}, status={stop_status}")
+            logger.info(f"Exchange-Side Protective Stop ACCEPTED by Binance: ID={stop_order_id}, status={stop_status}")
         except Exception as stop_err:
             # FAIL-CLOSED: An unprotected live position is prohibited!
             logger.critical(
@@ -215,7 +237,7 @@ class BinanceLiveExecutionEngine(ExecutionEngine):
                     symbol=decision.symbol,
                     type="market",
                     side="sell",
-                    amount=filled_qty,
+                    amount=norm_stop_qty,
                 )
             except Exception as close_err:
                 logger.critical(f"Emergency liquidation also failed: {close_err}")

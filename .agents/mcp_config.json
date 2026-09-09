@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "TestSprite": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\Home\\AppData\\Roaming\\npm\\node_modules\\@testsprite\\testsprite-mcp\\dist\\index.js",
+        "server"
+      ],
+      "env": {
+        "API_KEY": "sk-member-TzkkRk6fVnIZJRQTAe0w-MmMp6S8o7BctsFPe26dcjE",
+        "TESTSPRITE_API_KEY": "sk-member-TzkkRk6fVnIZJRQTAe0w-MmMp6S8o7BctsFPe26dcjE"
+      }
+    }
+  }
+}

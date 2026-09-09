@@ -69,6 +69,14 @@ class OrderManager:
         6. Protective stop verification.
         7. Record trade count.
         """
+        if self.execution_engine and getattr(self.execution_engine, "is_halted", False) is True:
+            raise PermissionError("OrderManager rejection: Execution engine is currently HALTED by emergency stop.")
+
+        if self.risk_engine and hasattr(self.risk_engine, "circuit_breaker"):
+            cb_state = getattr(self.risk_engine.circuit_breaker, "state", None)
+            if cb_state and getattr(cb_state, "value", str(cb_state)) in ["TRIPPED", "EMERGENCY_HALT"]:
+                raise PermissionError(f"OrderManager rejection: Risk circuit breaker is {cb_state}.")
+
         if not decision or not decision.approved:
             raise PermissionError(f"OrderManager requires approved RiskDecision: {getattr(decision, 'reason', 'No decision')}")
 

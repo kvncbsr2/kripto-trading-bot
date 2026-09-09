@@ -101,10 +101,10 @@ class HeuristicFallbackProvider(BaseLLMProvider):
 
         if "reflection" in system_lower or "reflection" in user_lower:
             data = {
-                "trade_outcome_analysis": "Execution aligned with entry criteria.",
-                "root_cause": "Market reacted to macro level.",
-                "lesson_learned": "Respect trailing stop and ensure volume confirms breakout.",
-                "recommendation": "Require secondary confirmation candle before trend re-entry.",
+                "trade_outcome_analysis": "Execution aligned with recorded telemetry.",
+                "root_cause": "UNKNOWN (Insufficient market context for factual inference)",
+                "lesson_learned": "Trade closed per recorded control threshold. Maintain disciplined risk rules.",
+                "recommendation": "Preserve risk budget and require secondary confirmation before re-entry.",
             }
             return json.dumps(data) if json_mode else data["lesson_learned"]
 

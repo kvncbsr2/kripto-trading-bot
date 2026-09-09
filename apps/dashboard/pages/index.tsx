@@ -24,6 +24,14 @@ import {
 
 const API_BASE = 'http://localhost:8000';
 
+const getAuthHeaders = (customHeaders: Record<string, string> = {}) => {
+  const key = (typeof window !== 'undefined' && (window as any).__KRIPTO_API_KEY__) || 'kripto_admin_api_key_v6_production_safe_token_2026';
+  return {
+    ...customHeaders,
+    'X-API-KEY': key,
+  };
+};
+
 export default function UltraSimpleDashboard() {
   // Navigation: 3 simple sections only
   const [activeTab, setActiveTab] = useState<'bot' | 'market' | 'settings'>('bot');
@@ -142,8 +150,8 @@ export default function UltraSimpleDashboard() {
     setFeedback(null);
     try {
       const isRunning = systemState?.is_autonomous_active;
-      const endpoint = isRunning ? `${API_BASE}/api/agent/stop` : `${API_BASE}/api/agent/start`;
-      const res = await fetch(endpoint, { method: 'POST' });
+      const endpoint = isRunning ? `${API_BASE}/api/agent/stop` : `${API_BASE}/api/agent/start?unhalt=true&force=true`;
+      const res = await fetch(endpoint, { method: 'POST', headers: getAuthHeaders() });
       const data = await res.json();
       if (res.ok && data.success !== false) {
         setFeedback({
@@ -151,7 +159,7 @@ export default function UltraSimpleDashboard() {
           type: 'success'
         });
       } else {
-        setFeedback({ msg: data.detail || 'İşlem gerçekleştirilemedi.', type: 'error' });
+        setFeedback({ msg: data.detail || data.message || 'İşlem gerçekleştirilemedi.', type: 'error' });
       }
       loadData();
     } catch (e: any) {
@@ -166,7 +174,7 @@ export default function UltraSimpleDashboard() {
   const handleEmergencyStop = async () => {
     if (!confirm('Tüm işlemleri derhal dondurmak istiyor musunuz?')) return;
     try {
-      await fetch(`${API_BASE}/api/v1/risk/emergency-stop`, { method: 'POST' });
+      await fetch(`${API_BASE}/api/v1/risk/emergency-stop`, { method: 'POST', headers: getAuthHeaders() });
       setFeedback({ msg: 'Acil durdurma devrede. Bot kapatıldı.', type: 'success' });
       loadData();
     } catch (e: any) {
@@ -181,7 +189,7 @@ export default function UltraSimpleDashboard() {
     try {
       const res = await fetch(`${API_BASE}/api/v1/orders/paper/execute`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           symbol: testSymbol,
           side: 'BUY',
@@ -206,7 +214,7 @@ export default function UltraSimpleDashboard() {
   // Pozisyon Kapat
   const closePosition = async (id: string) => {
     try {
-      await fetch(`${API_BASE}/api/v1/positions/${id}/close`, { method: 'POST' });
+      await fetch(`${API_BASE}/api/v1/positions/${id}/close`, { method: 'POST', headers: getAuthHeaders() });
       setFeedback({ msg: 'Pozisyon satıldı ve nakde geçildi.', type: 'success' });
       loadData();
     } catch (e: any) {
@@ -220,12 +228,12 @@ export default function UltraSimpleDashboard() {
     try {
       const res = await fetch(`${API_BASE}/api/v1/backtest/run`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           symbol: 'BTC/USDT',
           timeframe: '15m',
           strategy: 'r10_rsi_divergence',
-          initial_capital: 5000,
+          initial_capital: Number(systemState?.initial_capital ?? 5000),
           fees: 0.001,
           slippage_bps: 5.0
         })
@@ -241,10 +249,11 @@ export default function UltraSimpleDashboard() {
 
   // Değişkenler
   const isRunning = Boolean(systemState?.is_autonomous_active);
-  const balance = systemState?.balance ?? 5000.0;
-  const equity = systemState?.equity ?? 5000.0;
+  const initialCapital = Number(systemState?.initial_capital ?? 5000.0);
+  const balance = systemState?.balance ?? initialCapital;
+  const equity = systemState?.equity ?? initialCapital;
   const dailyPnl = systemState?.daily_pnl ?? 0.0;
-  const totalProfit = equity - 5000.0;
+  const totalProfit = equity - initialCapital;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col selection:bg-blue-600 selection:text-white">
@@ -400,7 +409,7 @@ export default function UltraSimpleDashboard() {
                 <div className="text-2xl font-black text-white font-mono mt-2">
                   ${equity.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </div>
-                <div className="text-[11px] text-slate-500 mt-1">Başlangıç: $5,000.00</div>
+                <div className="text-[11px] text-slate-500 mt-1">Başlangıç: ${initialCapital.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               </div>
 
               {/* Bugünkü Kâr / Zarar */}

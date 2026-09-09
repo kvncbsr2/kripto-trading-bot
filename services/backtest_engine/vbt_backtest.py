@@ -19,13 +19,15 @@ class VectorBTBacktester:
 
     def __init__(
         self,
-        initial_capital: float = 5000.0,
-        fees: float = 0.001,
-        slippage_bps: float = 5.0,
+        initial_capital: Optional[float] = None,
+        fees: Optional[float] = None,
+        slippage_bps: Optional[float] = None,
     ):
-        self.initial_capital = initial_capital
-        self.fees = fees
-        self.slippage = slippage_bps / 10000.0
+        cfg = get_settings()
+        self.initial_capital = initial_capital if initial_capital is not None else getattr(cfg, "INITIAL_CAPITAL", 5000.0)
+        self.fees = fees if fees is not None else getattr(cfg, "TAKER_FEE", 0.001)
+        slip = slippage_bps if slippage_bps is not None else getattr(cfg, "SLIPPAGE_BPS", 5.0)
+        self.slippage = slip / 10000.0
 
     def run_backtest_from_signals(
         self,

@@ -2,6 +2,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from apps.api.app.main import app
+from shared.config import get_settings
+
+settings = get_settings()
 
 
 @pytest.mark.asyncio
@@ -33,7 +36,8 @@ async def test_market_and_portfolio_endpoints():
 
         resp_risk = await ac.get("/risk/status")
         assert resp_risk.status_code == 200
-        assert resp_risk.json()["daily_max_loss_usd"] in [50.0, 60.0, 100.0]
+        from apps.api.app.api.state import risk_engine
+        assert resp_risk.json()["daily_max_loss_usd"] == risk_engine.daily_max_loss_usd
 
         resp_sys = await ac.get("/system/status")
         assert resp_sys.status_code == 200

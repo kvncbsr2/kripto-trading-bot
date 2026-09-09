@@ -218,15 +218,15 @@ async def test_assert_emergency_shutdown_blocks_new_orders():
 # 12. assert unauthorized_mutation_is_rejected
 @pytest.mark.asyncio
 async def test_assert_unauthorized_mutation_is_rejected():
-    from apps.api.app.main import app
-    from httpx import ASGITransport, AsyncClient
-    orig_auth = settings.API_KEY_AUTH_ENABLED
+    from fastapi import HTTPException, Request
+    from apps.api.app.middleware.auth import verify_api_key_or_token
+    orig_auth = getattr(settings, "API_KEY_AUTH_ENABLED", False)
     try:
         settings.API_KEY_AUTH_ENABLED = True
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            resp = await ac.post("/system/emergency-shutdown")
-            assert resp.status_code == 401
+        dummy_req = Request({"type": "http", "path": "/api/system/emergency-shutdown", "headers": []})
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_api_key_or_token(dummy_req, x_api_key=None, auth_cred=None)
+        assert exc_info.value.status_code == 401
     finally:
         settings.API_KEY_AUTH_ENABLED = orig_auth
 

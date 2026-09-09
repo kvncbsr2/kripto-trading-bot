@@ -28,6 +28,8 @@ class Candle(BaseModel):
     volume: float
     quote_volume: Optional[float] = None
     exchange: ExchangeName = ExchangeName.BINANCE
+    is_closed: bool = True
+
 
 
 class MarketTick(BaseModel):
@@ -105,6 +107,7 @@ class Signal(BaseModel):
     stop_price: float
     take_profit: float
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    opportunity_score: Optional[float] = None
     regime: MarketRegime = MarketRegime.UNKNOWN
     reason: str = ""
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -115,7 +118,7 @@ class RiskLimits(BaseModel):
     max_risk_per_trade: float = 0.01  # 1.0%
     max_daily_loss: float = 0.08  # 8.0%
     max_drawdown: float = 0.15  # 15.0%
-    max_open_positions: int = 20
+    max_open_positions: int = 5
     risk_reward_ratio: float = 2.0
 
 
@@ -178,6 +181,13 @@ class Position(BaseModel):
     fees_paid: float = 0.0
     strategy: str = ""
     peak_price: Optional[float] = None
+    initial_quantity: Optional[float] = None
+    initial_stop_loss: Optional[float] = None
+    risk_dist: Optional[float] = None
+    partial_tp_hit: bool = False
+    partial_realized_pnl: float = 0.0
+    partial_fees_paid: float = 0.0
+    partial_realized_at: Optional[datetime] = None
 
 
 class PortfolioState(BaseModel):
@@ -187,6 +197,7 @@ class PortfolioState(BaseModel):
     realized_pnl: float = 0.0
     open_positions: List[Position] = Field(default_factory=list)
     daily_pnl: float = 0.0
+    daily_realized_pnl: Optional[float] = None
     max_drawdown_current: float = 0.0
     is_halted: bool = False
     halt_reason: Optional[str] = None

@@ -6,7 +6,7 @@ from database.init_db import init_models_async
 from services.autonomous_runner import AutonomousPaperTrader
 from services.command_bus.command_bus import CommandBus
 from services.market_data.market_data_service import MarketDataService
-from services.paper_broker.broker import PaperBroker
+from services.execution.paper_execution import PaperExecutionEngine
 from services.risk_engine.risk_engine import RiskEngine
 from shared.config import get_settings
 from shared.logging import get_logger
@@ -28,7 +28,7 @@ async def main():
         "circuit_state": "NORMAL",
     }
 
-    broker = PaperBroker(
+    broker = PaperExecutionEngine(
         initial_balance=settings.INITIAL_CAPITAL,
         maker_fee=settings.MAKER_FEE,
         taker_fee=settings.TAKER_FEE,
@@ -53,7 +53,13 @@ async def main():
         market_data_service=market_data,
         risk_engine=risk_engine,
     )
-    runner.start()
+    try:
+        runner.start()
+    except RuntimeError as e:
+        logger.error(f"Cannot start trading worker: {e}")
+        await market_data.stop()
+        sys.exit(1)
+
     logger.info("Trading Worker loop is active and scanning real Binance spot markets.")
 
     stop_event = asyncio.Event()

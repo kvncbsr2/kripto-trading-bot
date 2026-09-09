@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from services.autonomous_runner import autonomous_trader
@@ -8,6 +9,8 @@ from services.paper_broker.validation_engine import PaperValidationEngine
 from services.risk_engine.risk_engine import RiskEngine
 from shared.config import get_settings
 from shared.logging import get_logger
+
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 logger = get_logger("api-state", service="api")
 settings = get_settings()
@@ -21,6 +24,7 @@ RUNTIME_STATE: Dict[str, Any] = {
     "realized_pnl": 0.0,
     "max_drawdown": 0.0,
     "open_positions": [],
+    "max_open_positions": settings.MAX_OPEN_POSITIONS,
     "closed_positions": [],
     "recent_signals": [],
     "is_halted": False,
@@ -52,7 +56,7 @@ paper_broker = PaperBroker(
     taker_fee=settings.TAKER_FEE,
     slippage_bps=settings.SLIPPAGE_BPS,
     is_spot_mode=True,
-    db_path="./kripto_agent.db",
+    db_path=str(PROJECT_ROOT / "kripto_agent.db"),
 )
 
 market_data_service = MarketDataService(symbols=settings.DEFAULT_SYMBOLS)

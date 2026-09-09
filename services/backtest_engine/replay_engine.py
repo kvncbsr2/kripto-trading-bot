@@ -9,6 +9,7 @@ from services.strategy_discovery.overfitting_engine import (
     OverfittingProtectionEngine,
 )
 from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
+from shared.config import get_settings
 from shared.enums import SignalDirection
 from shared.logging import get_logger
 
@@ -77,14 +78,16 @@ class CausalHistoricalReplayEngine:
     def __init__(
         self,
         strategy: Optional[R10RSIDivergenceStrategy] = None,
-        initial_capital: float = 5000.0,
-        fee_rate: float = 0.001,
-        slippage_bps: float = 5.0,
+        initial_capital: Optional[float] = None,
+        fee_rate: Optional[float] = None,
+        slippage_bps: Optional[float] = None,
     ):
+        cfg = get_settings()
         self.strategy = strategy or R10RSIDivergenceStrategy(left_bars=5, right_bars=5)
-        self.initial_capital = initial_capital
-        self.fee_rate = fee_rate
-        self.slippage_rate = slippage_bps / 10000.0
+        self.initial_capital = initial_capital if initial_capital is not None else getattr(cfg, "INITIAL_CAPITAL", 5000.0)
+        self.fee_rate = fee_rate if fee_rate is not None else getattr(cfg, "TAKER_FEE", 0.001)
+        slip = slippage_bps if slippage_bps is not None else getattr(cfg, "SLIPPAGE_BPS", 5.0)
+        self.slippage_rate = slip / 10000.0
         self.anti_lookahead = AntiLookaheadEngine(right_bars_delay=5)
 
     def run_replay(

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from services.feature_engine.indicators.momentum import calculate_rsi
+from services.feature_engine.indicators.trend import calculate_ema
 from services.feature_engine.volatility.volatility import calculate_atr
 from services.strategy_engine.strategies.base_strategy import BaseStrategy
 from shared.config import get_settings
@@ -58,6 +59,7 @@ class R10RSIDivergenceStrategy(BaseStrategy):
         risk_reward_ratio: float = 2.0,
         min_signal_score: float = 70.0,
         timeframe: str = "1d",
+        confirmation_enabled: bool = True,
         enabled: bool = True,
     ):
         super().__init__(name=name, enabled=enabled)
@@ -68,6 +70,15 @@ class R10RSIDivergenceStrategy(BaseStrategy):
         self.risk_reward_ratio = risk_reward_ratio
         self.min_signal_score = min_signal_score
         self.timeframe = timeframe
+        # FIX (2026-09): R10_CONFIRMATION_ENABLED existed in config.py but was never
+        # read anywhere in the codebase - a dead flag with no effect. External research
+        # on RSI divergence trading (independent backtesting sources) consistently notes
+        # that raw divergence signals are identified only in hindsight and that requiring
+        # a structural confirmation (price reclaiming a short-term moving average, a
+        # confirming candle, or a trendline break) is what separates reported win rates
+        # in the ~55-65% range from the <40% range for unconfirmed divergence alone. This
+        # wires the flag to an actual EMA-reclaim confirmation check below.
+        self.confirmation_enabled = confirmation_enabled
 
     @staticmethod
     def calculate_signal_score_from_divergence(div_score: float) -> float:
@@ -191,11 +202,13 @@ class R10RSIDivergenceStrategy(BaseStrategy):
         if len(df) < (self.rsi_length + self.left_bars + self.right_bars + 5):
             return None
 
-        # Ensure RSI and ATR are computed
+        # Ensure RSI, ATR, and EMA9 are computed
         if "rsi" not in df.columns:
             df["rsi"] = calculate_rsi(df["close"], self.rsi_length)
         if "atr" not in df.columns:
             df["atr"] = calculate_atr(df["high"], df["low"], df["close"], 14)
+        if "ema_9" not in df.columns:
+            df["ema_9"] = calculate_ema(df["close"], 9)
 
         current_idx = len(df) - 1
         current_candle = df.iloc[current_idx]
@@ -206,6 +219,11 @@ class R10RSIDivergenceStrategy(BaseStrategy):
             else current_price * 0.02
         )
         current_time = pd.to_datetime(current_candle["timestamp"]).to_pydatetime()
+        ema9_now = (
+            float(current_candle["ema_9"])
+            if not np.isnan(current_candle["ema_9"])
+            else None
+        )
 
         low_pivots, high_pivots = self.detect_pivots_strictly_causal(df, current_idx)
 
@@ -225,9 +243,14 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                     signal_score = min(100.0, max(0.0, quality * 0.7 + 25.0))
 
                     if signal_score >= self.min_signal_score:
+                        # Structural confirmation: price must have reclaimed the
+                        # short-term EMA, not just show a raw RSI divergence.
+                        bullish_confirmed = not (
+                            self.confirmation_enabled and ema9_now is not None and current_price < ema9_now
+                        )
                         stop_loss = _format_price_precision(p2.price - (current_atr * self.atr_multiplier))
                         risk_dist = current_price - stop_loss
-                        if risk_dist > 0:
+                        if bullish_confirmed and risk_dist > 0:
                             take_profit = _format_price_precision(
                                 current_price + (risk_dist * self.risk_reward_ratio)
                             )
@@ -269,9 +292,12 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                     signal_score = min(100.0, max(0.0, quality * 0.7 + 25.0))
 
                     if signal_score >= self.min_signal_score:
+                        bearish_confirmed = not (
+                            self.confirmation_enabled and ema9_now is not None and current_price > ema9_now
+                        )
                         stop_loss = _format_price_precision(p2.price + (current_atr * self.atr_multiplier))
                         risk_dist = stop_loss - current_price
-                        if risk_dist > 0:
+                        if bearish_confirmed and risk_dist > 0:
                             take_profit = _format_price_precision(
                                 current_price - (risk_dist * self.risk_reward_ratio)
                             )
@@ -388,5 +414,6 @@ def create_r10_strategy_from_settings(settings: Optional[object] = None) -> R10R
         risk_reward_ratio=settings.PREFERRED_RISK_REWARD,
         min_signal_score=settings.MIN_SIGNAL_SCORE,
         timeframe=settings.R10_TIMEFRAME,
+        confirmation_enabled=getattr(settings, "R10_CONFIRMATION_ENABLED", True),
         enabled=settings.R10_ENABLED,
     )

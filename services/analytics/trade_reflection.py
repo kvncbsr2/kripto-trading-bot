@@ -99,13 +99,13 @@ class TradeReflectionEngine:
         except Exception as e:
             logger.debug(f"LLM reflection fallback used: {e}")
             if is_win:
-                root_cause = "Trade reached target within risk parameters."
-                lesson = "Trend continuation and R/R symmetry respected."
-                rec = "Reinvest gains according to risk sizing rules."
+                root_cause = "Trade reached target within recorded risk parameters."
+                lesson = "Target threshold respected per strategy rules."
+                rec = "Manage gains according to capital allocation rules."
             else:
-                root_cause = f"Hit {exit_reason} due to counter-trend volatility."
-                lesson = "Tighten stop or avoid entering near macro resistance/support."
-                rec = "Require secondary volume confirmation before next entry."
+                root_cause = f"Position closed by {exit_reason} at {exit_price}."
+                lesson = "Risk threshold enforced to cap adverse loss."
+                rec = "Require secondary confirmation before re-entry."
 
         record = TradeReflectionRecord(
             reflection_id=f"refl-{trade_id}-{int(datetime.now(timezone.utc).timestamp())}",

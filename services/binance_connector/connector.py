@@ -61,6 +61,8 @@ class BinanceConnector:
 
         # Local cache for book tickers: symbol -> {bid, ask, spread, spread_bps, timestamp}
         self.book_tickers: Dict[str, Dict[str, Any]] = {}
+        self._processed_candle_keys: set = set()
+
 
         # REST client (read-only)
         self.rest_client = ccxt.binance(
@@ -129,6 +131,26 @@ class BinanceConnector:
                         volume=float(k[5]),
                     )
                 )
+
+            # FIX (2026-09, critical, re-applied): Binance's klines endpoint includes
+            # the CURRENTLY FORMING candle as the last element by default — its
+            # high/low/close keep changing until the bar actually closes. Every
+            # strategy in this codebase (especially R10's "Strict Causal
+            # Anti-Lookahead Guarantee") assumes the last row of the dataframe is a
+            # CLOSED bar. Left unfixed, a pivot's confirmation window could include
+            # this still-mutating candle, letting a signal fire on a high/low that
+            # hasn't finished forming — a genuine repainting risk. Drop the last
+            # candle here if it hasn't closed yet, so every consumer downstream only
+            # ever sees closed bars.
+            tf_seconds = {
+                "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400,
+            }.get(timeframe, 900)
+            if candles:
+                last = candles[-1]
+                bar_close_time = last.timestamp.timestamp() + tf_seconds
+                if bar_close_time > datetime.now(timezone.utc).timestamp():
+                    candles.pop()
+
             return candles
         except Exception as e:
             logger.error(f"REST fetch_ohlcv error for {symbol}: {e}")
@@ -221,18 +243,39 @@ class BinanceConnector:
                 k = data.get("k", {})
                 sym_raw = k.get("s", "")
                 symbol = f"{sym_raw[:-4]}/{sym_raw[-4:]}" if sym_raw.endswith("USDT") else sym_raw
+                
+                # Strict anti-lookahead / anti-repainting rule: Only process closed candles (x=True)
+                is_closed = bool(k.get("x", False))
+                if not is_closed:
+                    return
+
+                candle_ts = normalize_timestamp(k.get("t"))
+                tf_val = self.timeframe.value if hasattr(self.timeframe, "value") else str(self.timeframe)
+                candle_key = (symbol, tf_val, int(candle_ts.timestamp()))
+
+                # Deduplication: Drop duplicate closed candles (e.g. from reconnects)
+                if candle_key in self._processed_candle_keys:
+                    logger.debug(f"Duplicate closed candle ignored: {candle_key}")
+                    return
+
+                self._processed_candle_keys.add(candle_key)
+                if len(self._processed_candle_keys) > 5000:
+                    self._processed_candle_keys = set(list(self._processed_candle_keys)[-2500:])
+
                 candle = Candle(
                     symbol=symbol,
                     timeframe=self.timeframe,
-                    timestamp=normalize_timestamp(k.get("t")),
+                    timestamp=candle_ts,
                     open=float(k.get("o", 0.0)),
                     high=float(k.get("h", 0.0)),
                     low=float(k.get("l", 0.0)),
                     close=float(k.get("c", 0.0)),
                     volume=float(k.get("v", 0.0)),
+                    is_closed=True,
                 )
                 for cb in self.candle_callbacks:
                     cb(candle)
+
 
             # 2. BookTicker stream (Bid / Ask / Spread)
             elif "bookTicker" in stream_name:

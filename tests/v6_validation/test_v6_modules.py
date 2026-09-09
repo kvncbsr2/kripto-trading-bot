@@ -15,8 +15,14 @@ from shared.enums import SignalDirection
 
 @pytest.fixture
 async def client():
+    from shared.config import get_settings
+    adm_key = get_settings().API_ADMIN_KEY
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"X-API-KEY": adm_key},
+    ) as ac:
         yield ac
 
 

@@ -3,9 +3,10 @@ chcp 65001 > nul
 echo ===============================================================================
 echo ⚡ STARTING KRIPTO AGENT — LOCAL TRADING CONTROL CENTER
 echo ===============================================================================
-echo Opening Local Control Dashboard: http://localhost:8000/dashboard
-echo API OpenAPI Documentation:       http://localhost:8000/docs
-echo Prometheus Metrics:              http://localhost:8000/metrics
+echo Built-in Control Dashboard:       http://localhost:8000/dashboard
+echo Next.js React Dashboard (Optional): http://localhost:3000
+echo API OpenAPI Documentation:          http://localhost:8000/docs
+echo Prometheus Metrics:                 http://localhost:8000/metrics
 echo ===============================================================================
 
 REM Start browser after 2 seconds in background

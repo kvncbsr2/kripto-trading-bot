@@ -10,12 +10,14 @@ def calculate_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int
     """
     Calculates Average Directional Index (ADX) measuring trend strength.
     Strictly causal (no future data).
+    Correctly handles tied directional movement (+DM == -DM -> both zero per Wilder).
     """
-    plus_dm = high.diff()
-    minus_dm = -low.diff()
+    up_move = high.diff()
+    down_move = -low.diff()
 
-    plus_dm = plus_dm.where((plus_dm > minus_dm) & (plus_dm > 0), 0.0)
-    minus_dm = minus_dm.where((minus_dm > plus_dm) & (minus_dm > 0), 0.0)
+    # Wilder rule: if up_move == down_move or both <= 0, both directional movements are 0.0
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
 
     tr1 = high - low
     tr2 = (high - close.shift(1)).abs()
@@ -23,9 +25,18 @@ def calculate_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
 
     atr = tr.ewm(alpha=1.0 / period, adjust=False).mean()
-    plus_di = 100 * (plus_dm.ewm(alpha=1.0 / period, adjust=False).mean() / (atr + 1e-9))
-    minus_di = 100 * (minus_dm.ewm(alpha=1.0 / period, adjust=False).mean() / (atr + 1e-9))
+    atr_safe = atr.where(atr > 1e-9, 1e-9)
 
-    dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di + 1e-9))
+    plus_di = 100 * (plus_dm.ewm(alpha=1.0 / period, adjust=False).mean() / atr_safe)
+    minus_di = 100 * (minus_dm.ewm(alpha=1.0 / period, adjust=False).mean() / atr_safe)
+
+    di_sum = plus_di + minus_di
+    di_diff = (plus_di - minus_di).abs()
+
+    # If di_sum is 0 (e.g. perfect tie or flat movement), dx is 0.0
+    dx = pd.Series(0.0, index=high.index)
+    valid_mask = di_sum > 1e-9
+    dx[valid_mask] = 100 * (di_diff[valid_mask] / di_sum[valid_mask])
+
     adx = dx.ewm(alpha=1.0 / period, adjust=False).mean()
     return adx

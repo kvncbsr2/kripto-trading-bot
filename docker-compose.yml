@@ -54,23 +54,18 @@ services:
       - "8000:8000"
     command: uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000
 
-  trading_worker:
+  dashboard:
     build:
-      context: .
+      context: ./apps/dashboard
       dockerfile: Dockerfile
-    container_name: kripto_worker
+    container_name: kripto_dashboard
     restart: unless-stopped
-    depends_on:
-      timescaledb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    env_file:
-      - .env
+    ports:
+      - "3000:3000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@timescaledb:5432/kripto_agent
-      REDIS_URL: redis://redis:6379/0
-    command: python -m scripts.run_trading_loop
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - api
 
   prometheus:
     image: prom/prometheus:latest
@@ -89,7 +84,7 @@ services:
     container_name: kripto_grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin

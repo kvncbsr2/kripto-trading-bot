@@ -87,5 +87,5 @@ def test_crash_restart_persistence_lifecycle(tmp_path):
     assert engine3.balance == post_close_balance
     assert len(engine3.open_positions) == 0
     assert len(engine3.closed_positions_history) == 1
-    assert engine3.total_realized_pnl == closed.realized_pnl
+    assert engine3.total_realized_pnl == round(closed.realized_pnl, 2)
     assert len(engine3.fills) == 2

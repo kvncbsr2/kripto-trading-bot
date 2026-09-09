@@ -4,7 +4,10 @@ import pandas as pd
 
 
 def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
-    """Calculates Relative Strength Index (RSI)."""
+    """
+    Calculates Relative Strength Index (RSI).
+    Properly handles flat/constant price series by returning neutral 50.0.
+    """
     delta = series.diff()
     gain = delta.where(delta > 0, 0.0)
     loss = -delta.where(delta < 0, 0.0)
@@ -12,8 +15,19 @@ def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
     avg_gain = gain.ewm(alpha=1.0 / period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1.0 / period, adjust=False).mean()
 
-    rs = avg_gain / (avg_loss + 1e-9)
+    both_zero = (avg_gain == 0.0) & (avg_loss == 0.0)
+    zero_loss = (avg_loss == 0.0) & (avg_gain > 0.0)
+    zero_gain = (avg_gain == 0.0) & (avg_loss > 0.0)
+
+    rs = avg_gain / (avg_loss + 1e-12)
     rsi = 100.0 - (100.0 / (1.0 + rs))
+
+    # Neutral 50 for constant price series
+    rsi = rsi.where(~both_zero, 50.0)
+    # Pure gains -> 100.0
+    rsi = rsi.where(~zero_loss, 100.0)
+    # Pure losses -> 0.0
+    rsi = rsi.where(~zero_gain, 0.0)
     return rsi
 
 
