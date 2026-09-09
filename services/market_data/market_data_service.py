@@ -115,8 +115,8 @@ class MarketDataService:
             candles[-1] = candle
         else:
             candles.append(candle)
-            if len(candles) > 1500:
-                self._candle_cache[sym][tf] = candles[-1500:]
+            if len(candles) > 200:
+                self._candle_cache[sym][tf] = candles[-200:]
 
     def _on_book_ticker_received(self, data: Dict[str, Any]):
         sym = data.get("symbol")

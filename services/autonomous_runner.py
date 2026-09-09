@@ -469,7 +469,7 @@ class AutonomousPaperTrader:
             service="runner"
         )
 
-        scan_sem = asyncio.Semaphore(12)
+        scan_sem = asyncio.Semaphore(4)
 
         async def _scan_single_symbol(sym: str):
             async with scan_sem:
@@ -643,6 +643,8 @@ class AutonomousPaperTrader:
         self.last_action = complete_msg
         add_system_log(complete_msg, level="INFO", service="runner")
         self._sync_runtime_state()
+        import gc
+        gc.collect()
         return {"action": "SCAN_COMPLETE", "open_positions": open_count, "executed": executed_orders_count}
 
     def _sync_runtime_state(self):

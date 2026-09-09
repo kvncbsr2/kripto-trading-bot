@@ -2,6 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Optimize Linux memory management for 512MB RAM containers
+ENV PYTHONUNBUFFERED=1 \
+    MALLOC_TRIM_THRESHOLD_=65536 \
+    PYTHONMALLOC=malloc
+
 # Install build essentials and libpq for PostgreSQL
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \

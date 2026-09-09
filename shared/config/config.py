@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     SLIPPAGE_BPS: float = 5.0  # 5 bps
     MAX_SPREAD_BPS: float = 15.0  # Max spread 15 bps
     MIN_24H_VOLUME_USDT: float = 500000.0  # Min $500K 24h volume
-    MAX_UNIVERSE_SYMBOLS: int = 200  # Top 200 liquid Binance pairs
+    MAX_UNIVERSE_SYMBOLS: int = 30  # Top 30 highly-liquid Binance pairs (low-memory cloud friendly)
     BINANCE_ENVIRONMENT: str = "production_market_data"
     BINANCE_ENV: str = "production_market_data"
 
