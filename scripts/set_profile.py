@@ -32,8 +32,6 @@ from shared.config import get_settings
 from services.config_manager.risk_profiles import (
     get_all_profiles,
     get_profile,
-    apply_profile_to_system,
-    apply_strategy_to_system,
 )
 from services.strategy_engine.registry import get_all_strategies, STRATEGY_REGISTRY
 
@@ -86,7 +84,7 @@ def print_strategies_table(current_strategy_id: str = "r10_rsi_divergence"):
     print("=" * 94 + "\n")
 
 
-def apply_profile_via_api(level: int):
+def apply_profile_via_api(level: int) -> dict:
     url = f"{API_BASE}/api/v1/system/profile"
     headers = {
         "Content-Type": "application/json",
@@ -96,12 +94,34 @@ def apply_profile_via_api(level: int):
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=3.0) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception:
-        return None
+            body = json.loads(resp.read().decode("utf-8"))
+            if body.get("success"):
+                return {"ok": True, "data": body, "reason": None}
+            return {
+                "ok": False,
+                "data": body,
+                "reason": body.get("message", "API işlemi başarısız döndü."),
+            }
+    except urllib.error.HTTPError as e:
+        err_msg = f"HTTP {e.code}: {e.reason}"
+        try:
+            err_body = json.loads(e.read().decode("utf-8"))
+            if "detail" in err_body:
+                err_msg += f" ({err_body['detail']})"
+        except Exception:
+            pass
+        return {"ok": False, "data": None, "reason": err_msg}
+    except urllib.error.URLError as e:
+        return {
+            "ok": False,
+            "data": None,
+            "reason": f"Bağlantı kurulamadı ({e.reason}). Bot/API sunucusu çalışıyor mu? (Adres: {API_BASE})",
+        }
+    except Exception as e:
+        return {"ok": False, "data": None, "reason": f"Beklenmeyen hata: {str(e)}"}
 
 
-def apply_strategy_via_api(strategy_id: str):
+def apply_strategy_via_api(strategy_id: str) -> dict:
     url = f"{API_BASE}/api/v1/system/strategy"
     headers = {
         "Content-Type": "application/json",
@@ -111,9 +131,31 @@ def apply_strategy_via_api(strategy_id: str):
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=3.0) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except Exception:
-        return None
+            body = json.loads(resp.read().decode("utf-8"))
+            if body.get("success"):
+                return {"ok": True, "data": body, "reason": None}
+            return {
+                "ok": False,
+                "data": body,
+                "reason": body.get("message", "API işlemi başarısız döndü."),
+            }
+    except urllib.error.HTTPError as e:
+        err_msg = f"HTTP {e.code}: {e.reason}"
+        try:
+            err_body = json.loads(e.read().decode("utf-8"))
+            if "detail" in err_body:
+                err_msg += f" ({err_body['detail']})"
+        except Exception:
+            pass
+        return {"ok": False, "data": None, "reason": err_msg}
+    except urllib.error.URLError as e:
+        return {
+            "ok": False,
+            "data": None,
+            "reason": f"Bağlantı kurulamadı ({e.reason}). Bot/API sunucusu çalışıyor mu? (Adres: {API_BASE})",
+        }
+    except Exception as e:
+        return {"ok": False, "data": None, "reason": f"Beklenmeyen hata: {str(e)}"}
 
 
 def get_status_via_api():
@@ -162,11 +204,13 @@ def main():
             sys.exit(1)
         print(f"🔄 Strateji '{target_strat}' uygulanıyor...")
         api_res = apply_strategy_via_api(target_strat)
-        if api_res and api_res.get("success"):
+        if api_res.get("ok"):
             print(f"✅ Canlı API üzerinden '{target_strat}' başarıyla aktif edildi!")
         else:
-            apply_strategy_to_system(target_strat)
-            print(f"✅ Yerel bellek üzerinden '{target_strat}' aktif edildi.")
+            print(f"❌ HATA: Canlı API üzerinden strateji uygulanamadı!")
+            print(f"   Sebep: {api_res.get('reason')}")
+            print("   ⚠️ UYARI: Botun gerçek çalışan hâli DEĞİŞMEDİ. Mevcut stratejide çalışmaya devam ediyor.")
+            sys.exit(1)
         return
 
     if first_arg in ("reset", "rollback", "default", "baseline"):
@@ -184,13 +228,14 @@ def main():
     print(f"🔄 Seviye L{target_level} uygulanıyor...")
 
     api_res = apply_profile_via_api(target_level)
-    if api_res and api_res.get("success"):
-        prof = api_res.get("profile", {})
-        print(f"✅ Canlı API üzerinden L{target_level} ({prof.get('name')}) başarıyla uygulandı!")
-    else:
-        local_res = apply_profile_to_system(target_level)
-        prof = local_res.get("profile", {})
-        print(f"✅ Yerel bellek üzerinden L{target_level} ({prof.get('name')}) uygulandı.")
+    if not api_res.get("ok"):
+        print(f"❌ HATA: Canlı API üzerinden L{target_level} profili uygulanamadı!")
+        print(f"   Sebep: {api_res.get('reason')}")
+        print("   ⚠️ UYARI: Botun gerçek çalışan hâli DEĞİŞMEDİ. Mevcut risk profilinde çalışmaya devam ediyor.")
+        sys.exit(1)
+
+    prof = api_res["data"].get("profile", {})
+    print(f"✅ Canlı API üzerinden L{target_level} ({prof.get('name')}) başarıyla uygulandı!")
 
     print(f"\n📊 GÜNCEL KONFİGÜRASYON (L{target_level} - {prof.get('name')}):")
     print(f"   • İşlem Başı Risk:    %{prof.get('risk_per_trade_pct', 0.5):.1f}")

@@ -68,5 +68,15 @@ autonomous_trader.bind_command_bus(command_bus)
 autonomous_trader.bind_market_data_service(market_data_service)
 autonomous_trader.risk_engine = risk_engine
 
+# Synchronize authoritative initial risk profile (L1 Baseline) across runtime and engines
+from services.config_manager.risk_profiles import apply_profile_to_system
+
+try:
+    apply_profile_to_system(1, source="startup")
+    logger.info("Initialized authoritative system state with baseline Risk Profile L1.")
+except Exception as e:
+    logger.critical(f"FATAL: Failed to apply initial Risk Profile L1 on startup: {e}")
+    raise RuntimeError(f"Cannot initialize system risk profile on startup: {e}") from e
+
 LATEST_REPLAY_REPORT: Optional[Dict[str, Any]] = None
 EXPERIMENT_RUNS: Dict[str, Dict[str, Any]] = {}
