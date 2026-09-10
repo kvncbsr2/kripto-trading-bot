@@ -86,6 +86,7 @@ class FeatureVector(BaseModel):
     timeframe: Timeframe
     timestamp: datetime
     indicators: Dict[str, float] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class MarketRegimeState(BaseModel):

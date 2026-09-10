@@ -49,3 +49,28 @@ def test_risk_engine_veto_authority():
     decision = risk_engine.evaluate_signal(signal, portfolio)
     assert not decision.approved
     assert "DAILY_RISK_LOCK" in decision.reason or "Daily loss reached" in decision.reason
+
+
+@pytest.mark.asyncio
+async def test_order_manager_rejects_unapproved_decision():
+    from unittest.mock import MagicMock
+    from services.execution.order_manager import OrderManager
+
+    mock_exec = MagicMock()
+    om = OrderManager(execution_engine=mock_exec)
+
+    unapproved = RiskDecision(
+        approved=False,
+        symbol="BTC/USDT",
+        direction=SignalDirection.LONG,
+        calculated_size=0.01,
+        entry_price=60000.0,
+        stop_loss=59000.0,
+        take_profit=62000.0,
+        reason="Blocked by Risk Engine",
+    )
+
+    with pytest.raises(PermissionError, match="OrderManager requires approved RiskDecision"):
+        await om.execute_risk_decision(unapproved)
+
+    mock_exec.execute_market_order.assert_not_called()

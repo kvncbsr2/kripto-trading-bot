@@ -40,6 +40,7 @@ class DynamicUniverseScreener:
         min_volume_usd: Optional[float] = None,
         max_symbols: Optional[int] = None,
         cache_ttl_seconds: float = 600.0,
+        fallback_on_error: bool = False,
     ):
         self.settings = get_settings()
         self.min_volume_usd = (
@@ -53,13 +54,16 @@ class DynamicUniverseScreener:
             else getattr(self.settings, "MAX_UNIVERSE_SYMBOLS", 200)
         )
         self.cache_ttl_seconds = cache_ttl_seconds
+        self.fallback_on_error = fallback_on_error
         self._cached_symbols: List[str] = []
         self._last_screen_time: float = 0.0
 
-    async def get_liquid_universe(self) -> List[str]:
+    async def get_liquid_universe(self, fallback_on_error: Optional[bool] = None) -> List[str]:
         now = time.time()
         if self._cached_symbols and (now - self._last_screen_time) < self.cache_ttl_seconds:
             return self._cached_symbols
+
+        use_fallback = self.fallback_on_error if fallback_on_error is None else fallback_on_error
 
         try:
             urls = [
@@ -78,7 +82,10 @@ class DynamicUniverseScreener:
                         continue
 
             if not data:
-                logger.warning("Binance 24hr ticker query failed on all endpoints. Using fallback universe.")
+                if use_fallback:
+                    logger.warning("Binance 24hr ticker query failed on all endpoints. Returning fallback universe.")
+                    return self._fallback_universe()
+                logger.warning("Binance 24hr ticker query failed on all endpoints. Failing closed (empty universe).")
                 return []
 
             filtered: List[Dict[str, Any]] = []
@@ -134,7 +141,10 @@ class DynamicUniverseScreener:
             return self._cached_symbols
 
         except Exception as e:
-            logger.error(f"Error screening Binance universe: {e}. Using fallback universe.")
+            if use_fallback:
+                logger.error(f"Error screening Binance universe: {e}. Returning fallback universe.")
+                return self._fallback_universe()
+            logger.error(f"Error screening Binance universe: {e}. Failing closed (empty universe).")
             return []
 
     def _fallback_universe(self) -> List[str]:

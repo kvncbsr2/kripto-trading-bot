@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 import asyncio
 from services.intelligence.whale_tracker import WhaleRadarTracker, WhaleTrade
 

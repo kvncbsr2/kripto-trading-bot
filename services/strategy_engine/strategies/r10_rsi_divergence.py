@@ -196,8 +196,10 @@ class R10RSIDivergenceStrategy(BaseStrategy):
         symbol: str,
     ) -> Optional[Signal]:
         """
+        CANONICAL R10 EVALUATION ENGINE:
         Evaluates R10 divergence on a full historical or streaming dataframe.
-        Guarantees that evaluation happens strictly on the last confirmed bar without lookahead.
+        Calculates Wilder RSI, ATR, EMA-9 reclaim confirmation, and causal pivots
+        with right_bars confirmation strictly on the last confirmed bar without lookahead.
         """
         if len(df) < (self.rsi_length + self.left_bars + self.right_bars + 5):
             return None
@@ -334,10 +336,19 @@ class R10RSIDivergenceStrategy(BaseStrategy):
     ) -> Optional[Signal]:
         """
         BaseStrategy interface integration.
-        Uses precomputed indicators in FeatureVector if divergence is confirmed.
+        If a candle dataframe is provided in features.metadata ("dataframe" or "df"),
+        delegates directly to the canonical evaluate_from_dataframe engine.
+        Otherwise, evaluates precomputed divergence indicators in FeatureVector.
         """
         if not self.enabled:
             return None
+
+        # Check for candle dataframe delegation in metadata
+        metadata = getattr(features, "metadata", None)
+        if metadata:
+            df = metadata.get("dataframe") if "dataframe" in metadata else metadata.get("df")
+            if df is not None and isinstance(df, pd.DataFrame):
+                return self.evaluate_from_dataframe(df, symbol=features.symbol)
 
         ind = features.indicators
         close = ind.get("close")

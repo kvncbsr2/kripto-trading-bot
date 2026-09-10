@@ -376,6 +376,8 @@ class AutonomousPaperTrader:
                         real_price = float(ticker["price"])
                         broker.update_market_price(symbol, real_price)
 
+                        was_partial = getattr(pos, "partial_tp_hit", False)
+
                         # Check real SL/TP/trailing
                         result = broker.check_position_stops_and_targets(
                             symbol=symbol,
@@ -405,6 +407,42 @@ class AutonomousPaperTrader:
                                 "symbol": symbol,
                                 "pnl": closed_pos.realized_pnl,
                             }
+                        elif not was_partial and getattr(pos, "partial_tp_hit", False):
+                            partial_pnl = getattr(pos, "partial_realized_pnl", 0.0)
+                            self.last_action = (
+                                f"🎯 {symbol} 1R Kısmi Kâr Alındı (%50). Realize Kâr: +${partial_pnl:.2f}. "
+                                f"Kalan pozisyon Stop Loss seviyesi başabaşa (${pos.stop_loss:.2f}) çekildi."
+                            )
+                            logger.info(self.last_action)
+                            add_system_log(self.last_action, level="INFO", service="execution")
+                            asyncio.create_task(telegram_service.notify_trade_close(
+                                pos={
+                                    "symbol": symbol,
+                                    "current_price": real_price,
+                                    "realized_pnl": partial_pnl,
+                                    "fees_paid": getattr(pos, "partial_fees_paid", 0.0),
+                                },
+                                reason="PARTIAL_TP_1R (50% @ 1R Breakeven Lock)",
+                            ))
+                            if self.command_bus and hasattr(self.command_bus, "_log_audit"):
+                                self.command_bus._log_audit(
+                                    action="PAPER_POSITION_PARTIAL_EXIT",
+                                    parameters={
+                                        "symbol": symbol,
+                                        "reason": "PARTIAL_TP_1R",
+                                        "exit_price": real_price,
+                                        "partial_pnl": partial_pnl,
+                                    },
+                                    success=True,
+                                    result={"balance": broker.balance, "equity": broker.equity},
+                                )
+                            self._sync_runtime_state()
+                            return {
+                                "action": "POSITION_PARTIAL_EXIT",
+                                "symbol": symbol,
+                                "pnl": partial_pnl,
+                                "remaining_qty": pos.quantity,
+                            }
                 except Exception as e:
                     logger.warning(f"Failed to fetch live price for open position {symbol}: {e}")
 
@@ -423,6 +461,24 @@ class AutonomousPaperTrader:
             add_system_log(halt_msg, level="ERROR", service="risk")
             self._sync_runtime_state()
             return {"action": "EXPECTANCY_HALTED", "reason": exp_reason}
+
+        # ---------------------------------------------------------------------
+        # 1.6 Daily Profit Target Lock Guard ("Her gün kâr gör, kârı geri verme")
+        # ---------------------------------------------------------------------
+        open_count = len(broker.open_positions)
+        is_locked, lock_reason, current_daily_profit = self.risk_engine.is_daily_profit_locked(broker)
+        if is_locked:
+            lock_msg = f"💰 GÜNLÜK HEDEF KİLİTLENDİ: {lock_reason}. Kâr realize edildi (+${current_daily_profit:.2f}), yeni alımlar durduruldu."
+            self.last_action = lock_msg
+            logger.info(lock_msg)
+            add_system_log(lock_msg, level="INFO", service="risk")
+            self._sync_runtime_state()
+            return {
+                "action": "DAILY_TARGET_LOCKED",
+                "reason": lock_reason,
+                "daily_realized_pnl": current_daily_profit,
+                "open_positions": open_count,
+            }
 
         # ---------------------------------------------------------------------
         # 2. Evaluate Strategy and Risk Engine for New Positions
@@ -602,6 +658,27 @@ class AutonomousPaperTrader:
                 )
 
                 if decision.approved:
+                    # L2 Order Book Imbalance (OBI) & Spread Microstructure Guard (Hummingbot/HaasOnline model)
+                    try:
+                        ob = await mds.get_orderbook(sym, limit=20)
+                        if ob:
+                            obi_metrics = mds.calculate_orderbook_imbalance(ob)
+                            obi = obi_metrics["obi"]
+                            spread_bps = obi_metrics["spread_bps"]
+                            max_spread = getattr(settings, "MAX_SPREAD_BPS", 25.0)
+
+                            if spread_bps > max_spread:
+                                reject_msg = f"⛔ {sym}: Tahta makası çok geniş ({spread_bps:.1f} bps > {max_spread:.1f} bps). İşlem iptal edildi."
+                                add_system_log(reject_msg, level="WARNING", service="risk")
+                                continue
+
+                            if sig.direction == SignalDirection.LONG and obi < -0.25:
+                                reject_msg = f"⛔ {sym}: L2 Tahta baskısı satıcı ağırlıklı (OBI: {obi:.2f} < -0.25). Alım iptal edildi."
+                                add_system_log(reject_msg, level="WARNING", service="risk")
+                                continue
+                    except Exception as e:
+                        logger.warning(f"L2 orderbook check skipped for {sym}: {e}")
+
                     from services.execution.order_manager import order_manager
                     order_manager.bind_execution_engine(broker)
                     order_manager.bind_risk_engine(self.risk_engine)

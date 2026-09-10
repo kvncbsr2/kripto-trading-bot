@@ -2,7 +2,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -34,6 +34,8 @@ async def lifespan(app: FastAPI):
     logger.info("Connecting MarketDataService to Binance feed [CONNECTING]...")
     try:
         market_data_service.start()
+        import asyncio
+        asyncio.create_task(market_data_service.warm_up_cache())
     except Exception as e:
         logger.warning(f"MarketDataService background connector warning: {e}")
 
@@ -136,18 +138,18 @@ if os.path.isdir(static_dir):
 @app.get("/dashboard.html", response_class=HTMLResponse)
 @app.get("/dashboard", response_class=HTMLResponse)
 @app.get("/", response_class=HTMLResponse)
-async def serve_dashboard(response: Response):
+async def serve_dashboard(request: Request, response: Response):
     dashboard_path = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
     if os.path.exists(dashboard_path):
+        is_secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https"
         response.set_cookie(
             key="kripto_admin_token",
             value=settings.API_ADMIN_KEY,
-            httponly=False,
+            httponly=True,
+            secure=is_secure,
             samesite="lax",
             path="/",
         )
         with open(dashboard_path, "r", encoding="utf-8") as f:
-            content = f.read()
-            injected = f'<script>window.__KRIPTO_API_KEY__ = "{settings.API_ADMIN_KEY}";</script>'
-            return content.replace("<head>", f"<head>\n    {injected}", 1)
+            return f.read()
     return "<h1>KRIPTO AGENT Dashboard</h1><p>Static dashboard not found. Use Next.js app on port 3000.</p>"

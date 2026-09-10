@@ -47,3 +47,14 @@ async def test_dynamic_screener_fails_closed_on_network_error():
     with patch("httpx.AsyncClient.get", side_effect=Exception("Binance Network Timeout")):
         universe = await screener.get_liquid_universe()
         assert universe == []
+
+
+@pytest.mark.asyncio
+async def test_dynamic_screener_fallback_universe_when_enabled():
+    from services.market_data.dynamic_screener import FALLBACK_SYMBOLS
+    screener = DynamicUniverseScreener(fallback_on_error=True)
+
+    with patch("httpx.AsyncClient.get", side_effect=Exception("Binance Network Timeout")):
+        universe = await screener.get_liquid_universe()
+        assert universe == FALLBACK_SYMBOLS
+        assert "BTC/USDT" in universe

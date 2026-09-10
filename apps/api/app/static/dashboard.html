@@ -1204,7 +1204,7 @@
         let activeTab = 'bot';
 
         function getAuthHeaders(customHeaders = {}) {
-            const key = (typeof window !== 'undefined' && window.__KRIPTO_API_KEY__) || localStorage.getItem('KRIPTO_API_KEY') || 'kripto_admin_api_key_v6_production_safe_token_2026';
+            const key = typeof window !== 'undefined' ? localStorage.getItem('KRIPTO_API_KEY') : null;
             const headers = { ...customHeaders };
             if (key) {
                 headers['X-API-KEY'] = key;

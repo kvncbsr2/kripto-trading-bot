@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional, Tuple
 
 from services.risk_engine.circuit_breaker import CircuitBreaker
 from services.risk_engine.position_sizing import calculate_atr_position_size
@@ -53,6 +53,24 @@ class RiskEngine:
             max_drawdown_pct=0.10,
             max_trades_per_day=self.max_trades_per_day,
         )
+
+    def is_daily_profit_locked(self, portfolio: Any) -> Tuple[bool, str, float]:
+        """
+        Evaluates whether new trade entries are halted due to daily profit lock.
+        Returns (is_locked, reason, daily_profit).
+        """
+        daily_profit = getattr(portfolio, "daily_realized_pnl", None)
+        if daily_profit is None:
+            daily_pnl = getattr(portfolio, "daily_pnl", 0.0)
+            unrealized = getattr(portfolio, "unrealized_pnl", 0.0)
+            daily_profit = daily_pnl - unrealized
+
+        if self.target_mode == "HARD" and daily_profit >= self.daily_target_max:
+            return True, f"Hard daily profit target reached (+${daily_profit:.2f} >= ${self.daily_target_max:.2f})", daily_profit
+        if self.target_mode == "SOFT" and daily_profit >= self.daily_target_max:
+            return True, f"Daily profit ceiling reached under SOFT mode (+${daily_profit:.2f} >= ${self.daily_target_max:.2f})", daily_profit
+
+        return False, "", daily_profit
 
     def evaluate_signal(
         self,
@@ -153,19 +171,17 @@ class RiskEngine:
                 )
 
         # 2. Daily Profit Target Policies
-        daily_profit = portfolio.daily_realized_pnl
-        if daily_profit is None:
-            daily_profit = portfolio.daily_pnl - portfolio.unrealized_pnl
-        if self.target_mode == "HARD" and daily_profit >= self.daily_target_max:
+        is_locked, lock_reason, daily_profit = self.is_daily_profit_locked(portfolio)
+        if is_locked:
             return RiskDecision(
                 approved=False,
                 symbol=signal.symbol,
                 direction=signal.direction,
-                reason=f"Hard daily profit target reached (+${daily_profit:.2f} realized >= ${self.daily_target_max:.2f}). New entries halted.",
+                reason=f"{lock_reason}. New entries halted.",
             )
         elif self.target_mode == "SOFT" and daily_profit >= self.daily_target_min:
             # Under SOFT mode, if minimum target reached, only take exceptional signals (Score >= 75)
-            signal_score = signal.metadata.get("score", 60.0)
+            signal_score = signal.metadata.get("score", 60.0) if signal.metadata else 60.0
             if signal_score < 75.0:
                 return RiskDecision(
                     approved=False,

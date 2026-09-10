@@ -1095,8 +1095,11 @@ class PaperExecutionEngine(ExecutionEngine):
         pos.partial_realized_pnl = round(float(pos.partial_realized_pnl or 0.0) + leg_net_pnl, 4)
         pos.partial_fees_paid = round(float(pos.partial_fees_paid or 0.0) + leg_fees, 4)
         pos.partial_realized_at = now
-        # Move stop loss to Break-Even (entry price)
-        pos.stop_loss = pos.entry_price
+        # Move stop loss to Break-Even (entry price), never loosening an already-trailed stop
+        if pos.side == PositionSide.LONG:
+            pos.stop_loss = max(pos.stop_loss, pos.entry_price)
+        else:
+            pos.stop_loss = min(pos.stop_loss, pos.entry_price)
 
         # Record closing fill for this partial exit
         close_side = OrderSide.SELL if pos.side == PositionSide.LONG else OrderSide.BUY

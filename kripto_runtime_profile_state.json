@@ -1,7 +1,7 @@
 {
   "active_risk_profile_level": 1,
   "active_strategy_id": "r10_rsi_divergence",
-  "updated_at": "2026-09-09T21:13:58.373889+00:00",
+  "updated_at": "2026-09-09T23:59:03.290146+00:00",
   "version": "2.0.0",
-  "source": "startup_recovery"
+  "source": "api"
 }

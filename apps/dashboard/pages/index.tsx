@@ -25,11 +25,12 @@ import {
 const API_BASE = 'http://localhost:8000';
 
 const getAuthHeaders = (customHeaders: Record<string, string> = {}) => {
-  const key = (typeof window !== 'undefined' && (window as any).__KRIPTO_API_KEY__) || 'kripto_admin_api_key_v6_production_safe_token_2026';
-  return {
-    ...customHeaders,
-    'X-API-KEY': key,
-  };
+  const key = (typeof window !== 'undefined' && (localStorage.getItem('KRIPTO_API_KEY') || (window as any).__KRIPTO_API_KEY__)) || '';
+  const headers: Record<string, string> = { ...customHeaders };
+  if (key) {
+    headers['X-API-KEY'] = key;
+  }
+  return headers;
 };
 
 export default function UltraSimpleDashboard() {

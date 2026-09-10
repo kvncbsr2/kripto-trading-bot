@@ -37,6 +37,8 @@ class MarketDataService:
         self.quality_engine = DataQualityEngine()
         self.max_ticker_age_seconds = max_ticker_age_seconds
         self._candle_cache: Dict[str, Dict[str, List[Candle]]] = {s: {} for s in self.symbols}
+        self._candle_last_bucket: Dict[Tuple[str, str], int] = {}
+        self._candle_last_fetched: Dict[Tuple[str, str], float] = {}
         self._orderbook_cache: Dict[str, Dict[str, Any]] = {}
         self._ticker_cache: Dict[str, Dict[str, Any]] = {}
         self._is_started = False
@@ -104,7 +106,7 @@ class MarketDataService:
             return
 
         sym = candle.symbol
-        tf = candle.timeframe.value
+        tf = candle.timeframe.value if hasattr(candle.timeframe, "value") else str(candle.timeframe)
         if sym not in self._candle_cache:
             self._candle_cache[sym] = {}
         if tf not in self._candle_cache[sym]:
@@ -313,6 +315,28 @@ class MarketDataService:
 
         return None
 
+    @staticmethod
+    def calculate_orderbook_imbalance(orderbook: Optional[Dict[str, Any]]) -> Dict[str, float]:
+        """
+        Calculates L2 Order Book Imbalance (OBI) and depth metrics (Hummingbot/HaasOnline model).
+        OBI ranges from -1.0 (100% ask/selling wall) to +1.0 (100% bid/buying wall).
+        Positive OBI indicates buyers dominate resting liquidity, confirming upward momentum.
+        """
+        if not orderbook:
+            return {"obi": 0.0, "bid_volume": 0.0, "ask_volume": 0.0, "spread_bps": 0.0}
+        bids = orderbook.get("bids") or []
+        asks = orderbook.get("asks") or []
+        bid_vol = sum(float(q) for p, q in bids)
+        ask_vol = sum(float(q) for p, q in asks)
+        total_vol = bid_vol + ask_vol
+        obi = (bid_vol - ask_vol) / total_vol if total_vol > 0 else 0.0
+        return {
+            "obi": round(obi, 4),
+            "bid_volume": round(bid_vol, 4),
+            "ask_volume": round(ask_vol, 4),
+            "spread_bps": float(orderbook.get("spread_bps", 0.0)),
+        }
+
     def is_ticker_fresh(self, symbol: str, max_age_seconds: float = 3.0) -> bool:
         """Returns True if ticker exists in cache and was updated within max_age_seconds."""
         t = self._ticker_cache.get(symbol)
@@ -344,6 +368,15 @@ class MarketDataService:
         age = (datetime.now(timezone.utc) - latest_ts).total_seconds()
         return age <= max_age_seconds
 
+    @staticmethod
+    def _parse_timeframe_seconds(tf: str) -> int:
+        seconds_map = {
+            "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
+            "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800,
+            "12h": 43200, "1d": 86400, "3d": 259200, "1w": 604800,
+        }
+        return seconds_map.get(str(tf).lower(), 900)
+
     async def get_historical_candles(
         self,
         symbol: str,
@@ -351,12 +384,35 @@ class MarketDataService:
         limit: int = 100,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
+        force_refresh: bool = False,
     ) -> List[Candle]:
         """
-        Fetches historical candles from Binance REST.
-        Passes since and end_time timestamps to ccxt.
+        Fetches historical candles from Binance REST with intelligent in-memory caching.
+        For live polling (start is None and end is None), checks if current timeframe candle
+        bucket is still active and cached closed candles are fresh, avoiding redundant REST
+        calls during the same candle period.
+        Passes since and end_time timestamps to ccxt for backtest/range queries.
         Zero synthetic fallback.
         """
+        now_ts = time.time()
+        is_live_query = (start is None and end is None)
+
+        if is_live_query and not force_refresh:
+            tf_sec = self._parse_timeframe_seconds(timeframe)
+            cached_candles = self._candle_cache.get(symbol, {}).get(timeframe, [])
+
+            # Memory-First / WebSocket-First Guarantee:
+            # If we have at least 30 cached candles (sufficient for 14-period RSI, 20 EMA, 14 ATR & pivot detection)
+            # and the latest candle timestamp is continuous and fresh (within 2 timeframe intervals),
+            # serve immediately from RAM. Zero REST polling latency, zero Binance rate-limit weight used.
+            if cached_candles and len(cached_candles) >= min(limit, 30):
+                latest_ts = cached_candles[-1].timestamp
+                if latest_ts.tzinfo is None:
+                    latest_ts = latest_ts.replace(tzinfo=timezone.utc)
+                age = now_ts - latest_ts.timestamp()
+                if age <= (tf_sec * 2.0):
+                    return cached_candles[-limit:]
+
         try:
             since = int(start.timestamp() * 1000) if start else None
             end_time = int(end.timestamp() * 1000) if end else None
@@ -367,10 +423,43 @@ class MarketDataService:
                 since=since,
                 end_time=end_time,
             )
+            if candles and is_live_query:
+                if symbol not in self._candle_cache:
+                    self._candle_cache[symbol] = {}
+                self._candle_cache[symbol][timeframe] = candles[-200:]
+                tf_sec = self._parse_timeframe_seconds(timeframe)
+                self._candle_last_bucket[(symbol, timeframe)] = int(now_ts // tf_sec)
+                self._candle_last_fetched[(symbol, timeframe)] = now_ts
+
             return candles
         except Exception as e:
             logger.error(f"Failed to fetch historical candles for {symbol} ({timeframe}): {e}")
-            return []
+            return self._candle_cache.get(symbol, {}).get(timeframe, [])[-limit:] if is_live_query else []
+
+    async def warm_up_cache(
+        self,
+        symbols: Optional[List[str]] = None,
+        timeframe: str = "15m",
+        limit: int = 100,
+    ) -> int:
+        """
+        Pre-populates the in-memory candle cache using Binance REST on startup.
+        Once warmed up, WebSocket stream keeps the cache updated continuously,
+        ensuring subsequent queries never hit REST rate limits.
+        """
+        targets = symbols or getattr(self.connector, "symbols", []) or []
+        success_count = 0
+        logger.info(f"MarketDataService: Warming up local kline cache for {len(targets)} symbols ({timeframe})...")
+        for sym in targets:
+            try:
+                candles = await self.get_historical_candles(sym, timeframe=timeframe, limit=limit, force_refresh=True)
+                if candles and len(candles) >= 30:
+                    success_count += 1
+                await asyncio.sleep(0.05)  # Gentle pacing to avoid boot rate-limit spikes
+            except Exception as e:
+                logger.warning(f"Cache warm-up failed for {sym}: {e}")
+        logger.info(f"MarketDataService: Warmed up {success_count}/{len(targets)} symbols into local RAM cache.")
+        return success_count
 
     async def get_historical_klines(
         self,
@@ -379,8 +468,9 @@ class MarketDataService:
         limit: int = 100,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
+        force_refresh: bool = False,
     ) -> List[Candle]:
-        return await self.get_historical_candles(symbol, timeframe, limit, start, end)
+        return await self.get_historical_candles(symbol, timeframe, limit, start, end, force_refresh)
 
     async def close(self):
         """Cleanly terminates connector and closes all network sessions."""
