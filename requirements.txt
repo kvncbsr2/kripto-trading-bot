@@ -19,3 +19,4 @@ websockets>=12.0
 python-telegram-bot>=21.0
 psutil>=5.9.0
 prometheus-client>=0.20.0
+a2wsgi>=1.10.0
