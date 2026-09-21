@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -965,7 +965,10 @@ async def get_recent_decisions(limit: int = 50):
 
 @router.post("/api/v1/system/sync-git")
 @router.post("/system/sync-git")
-async def post_sync_git(_role: Role = Depends(verify_api_key_or_token)):
+async def post_sync_git(
+    background_tasks: BackgroundTasks,
+    _role: Role = Depends(verify_api_key_or_token),
+):
     """
     Pulls latest commits from GitHub repository (origin/main)
     using zero-fork pure-Python download & extraction,
@@ -974,12 +977,23 @@ async def post_sync_git(_role: Role = Depends(verify_api_key_or_token)):
     """
     import io
     import os
+    import shutil
     import urllib.request
     import zipfile
     from datetime import datetime, timezone
+    from pathlib import Path
 
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    results = {}
+    # Authoritatively find project root by searching upward for marker files
+    cur = Path(__file__).resolve()
+    project_root = None
+    for parent in cur.parents:
+        if (parent / "passenger_wsgi.py").exists() or ((parent / "database").is_dir() and (parent / "shared").is_dir()):
+            project_root = str(parent)
+            break
+    if not project_root:
+        project_root = str(cur.parents[5] if len(cur.parents) > 5 else cur.parents[-1])
+
+    results = {"project_root": project_root}
 
     try:
         # Download repository zip archive from GitHub without spawning subprocesses
@@ -1027,6 +1041,16 @@ async def post_sync_git(_role: Role = Depends(verify_api_key_or_token)):
 
         results["download_size_bytes"] = len(zip_bytes)
         results["updated_files"] = updated_files_count
+
+        # Clean up any misplaced directories from prior runs in apps/api/
+        for acc in ["apps", "database", "shared", "services", "domain", "config", "tests"]:
+            acc_dir = os.path.join(project_root, "apps", "api", acc)
+            if os.path.isdir(acc_dir):
+                try:
+                    shutil.rmtree(acc_dir)
+                except Exception:
+                    pass
+
         # Ensure SQLite is in DELETE journal mode and clean up any lock-prone shm/wal files
         try:
             import sqlite3
@@ -1054,7 +1078,18 @@ async def post_sync_git(_role: Role = Depends(verify_api_key_or_token)):
         restart_file = os.path.join(tmp_dir, "restart.txt")
         with open(restart_file, "a") as f:
             f.write(f"\n# Reload at {datetime.now(timezone.utc).isoformat()}")
+        try:
+            os.utime(restart_file, None)
+        except Exception:
+            pass
 
+        # Also schedule a clean process exit 1s later so Passenger immediately respawns fresh worker
+        def _delayed_exit():
+            import time
+            time.sleep(1.0)
+            os._exit(0)
+
+        background_tasks.add_task(_delayed_exit)
         results["restart_triggered"] = True
         return {
             "success": True,
