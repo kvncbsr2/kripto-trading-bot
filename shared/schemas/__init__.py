@@ -100,6 +100,7 @@ class MarketRegimeState(BaseModel):
 
 # Strategy & Signal Schemas
 class Signal(BaseModel):
+    signal_id: Optional[str] = None
     symbol: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     strategy: str

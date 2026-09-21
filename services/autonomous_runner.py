@@ -1005,7 +1005,10 @@ class AutonomousPaperTrader:
 
                 # Shadow Signal Gate Evaluation & Atomic Decision Snapshot
                 sig_id = getattr(sig, "signal_id", None) or f"SIG_{sym.replace('/', '_')}_{int(datetime.now(timezone.utc).timestamp() * 1000)}"
-                sig.signal_id = sig_id
+                try:
+                    sig.signal_id = sig_id
+                except Exception:
+                    pass
                 gate_eval = None
                 try:
                     from services.learning.signal_gate_engine import signal_gate_engine
