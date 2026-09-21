@@ -126,6 +126,10 @@
                     <span>🔄</span>
                     <span class="hidden sm:inline">Sıfırla</span>
                 </button>
+                <button id="btn-sync-git" onclick="syncFromGitHub()" title="GitHub'dan En Son Güncellemeleri Çek ve Yeniden Başlat" class="px-3.5 py-3 rounded-xl text-xs font-bold text-sky-400 hover:text-sky-300 bg-sky-950/70 hover:bg-sky-900/70 border border-sky-800/80 transition flex items-center gap-1.5">
+                    <span id="icon-sync-git">☁️</span>
+                    <span class="hidden sm:inline" id="txt-sync-git">GitHub Güncelle</span>
+                </button>
             </div>
         </header>
 
@@ -2032,6 +2036,44 @@
                 refreshData();
             } catch (e) {
                 showAlert(e.message, false);
+            }
+        }
+
+        // GitHub Senkronizasyonu & Otomatik Canlı Güncelleme
+        async function syncFromGitHub() {
+            const btn = document.getElementById('btn-sync-git');
+            const icon = document.getElementById('icon-sync-git');
+            const txt = document.getElementById('txt-sync-git');
+
+            if (!confirm("GitHub'daki en son güncellemeleri çekip sunucuyu yeniden başlatmak istiyor musunuz?")) {
+                return;
+            }
+
+            try {
+                if (icon) icon.textContent = '⏳';
+                if (txt) txt.textContent = 'Güncelleniyor...';
+                if (btn) btn.disabled = true;
+
+                const res = await fetch(`${API_BASE}/api/v1/system/sync-git`, {
+                    method: 'POST',
+                    headers: getAuthHeaders()
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    showAlert('✅ ' + data.message, true);
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    showAlert('❌ ' + (data.message || 'Güncelleme başarısız.'), false);
+                }
+            } catch (e) {
+                showAlert('Bağlantı hatası: ' + e.message, false);
+            } finally {
+                if (icon) icon.textContent = '☁️';
+                if (txt) txt.textContent = 'GitHub Güncelle';
+                if (btn) btn.disabled = false;
             }
         }
 

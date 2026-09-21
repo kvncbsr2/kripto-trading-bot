@@ -900,4 +900,53 @@ async def get_recent_decisions(limit: int = 50):
     }
 
 
+@router.post("/api/v1/system/sync-git")
+@router.post("/system/sync-git")
+async def post_sync_git(_role: Role = Depends(verify_api_key_or_token)):
+    """
+    Pulls latest commits from GitHub repository (origin/main)
+    and touches tmp/restart.txt to automatically trigger Passenger reload.
+    """
+    import subprocess
+    import os
+
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    results = {}
+
+    try:
+        # Run git pull origin main
+        pull_proc = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        results["git_pull"] = {
+            "returncode": pull_proc.returncode,
+            "stdout": pull_proc.stdout.strip(),
+            "stderr": pull_proc.stderr.strip(),
+        }
+
+        # Trigger Passenger reload via tmp/restart.txt
+        tmp_dir = os.path.join(project_root, "tmp")
+        os.makedirs(tmp_dir, exist_ok=True)
+        restart_file = os.path.join(tmp_dir, "restart.txt")
+        with open(restart_file, "a") as f:
+            f.write(f"\n# Reload at {datetime.now(timezone.utc).isoformat()}")
+
+        results["restart_triggered"] = True
+        return {
+            "success": pull_proc.returncode == 0,
+            "message": "GitHub senkronizasyonu tamamlandı ve sistem yeniden başlatılıyor." if pull_proc.returncode == 0 else f"Git çekme hatası: {pull_proc.stderr.strip()}",
+            "details": results,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Senkronizasyon hatası: {str(e)}",
+        }
+
+
+
 
