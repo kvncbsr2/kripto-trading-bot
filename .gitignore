@@ -87,3 +87,15 @@ scratch_inventory.json
 scratch_seed.py
 testsprite-plans/
 cloudflared.exe
+
+# Orphan database files
+crypto_agent.db
+paper_trading.db
+
+_pre_remediation_backups_20260914_212827/
+_pre_remediation_backups_*/
+
+# Archives and backup bundles
+*.zip
+*.tar.gz
+*.tgz

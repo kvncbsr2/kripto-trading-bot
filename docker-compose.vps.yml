@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  kripto_agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kripto_agent_vps
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Veritabani ve loglarin sunucu yeniden baslasa bile silinmemesi icin kalici disk baglama
+      - ./kripto_agent.db:/app/kripto_agent.db
+      - ./logs:/app/logs
+    environment:
+      - APP_ENV=production
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - SECURITY_LEVEL=1
+      - PAPER_TRADING=true
+      - LIVE_TRADING=false
+      - LIVE_TRADING_ARMED=false
+      - EXECUTION_MODE=paper
+      - AUTONOMOUS_AUTO_START=true
+      - DATABASE_URL=sqlite+aiosqlite:///./kripto_agent.db
+      - SYNC_DATABASE_URL=sqlite:///./kripto_agent.db
+      - MARKET_DATA_SOURCE=binance
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

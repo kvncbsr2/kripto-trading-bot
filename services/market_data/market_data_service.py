@@ -30,7 +30,7 @@ class MarketDataService:
         self,
         symbols: Optional[List[str]] = None,
         connector: Optional[BinanceConnector] = None,
-        max_ticker_age_seconds: float = 15.0,
+        max_ticker_age_seconds: float = 3.0,
     ):
         self.symbols = symbols or settings.DEFAULT_SYMBOLS
         self.connector = connector or BinanceConnector(symbols=self.symbols)
@@ -62,13 +62,15 @@ class MarketDataService:
     def start(self):
         """Starts background WebSocket streaming and heartbeat."""
         if not self._is_started:
-            self._is_started = True
             try:
                 loop = asyncio.get_running_loop()
                 self._ws_task = loop.create_task(self.connector.start())
-            except RuntimeError:
+                self._is_started = True
+                logger.info("MarketDataService started with BinanceConnector.")
+            except RuntimeError as e:
+                self._is_started = False
                 self._ws_task = None
-            logger.info("MarketDataService started with BinanceConnector.")
+                logger.warning(f"MarketDataService failed to start: no running event loop ({e}).")
 
     async def start_async(self):
         """Explicit async startup awaiting or creating background task."""
@@ -154,7 +156,7 @@ class MarketDataService:
             age = now_ts - cached.get("received_at", 0.0)
             if age <= self.max_ticker_age_seconds:
                 return cached
-            logger.warning(
+            logger.debug(
                 f"WebSocket ticker cache for {symbol} is stale ({age:.1f}s > {self.max_ticker_age_seconds}s). Attempting REST refresh."
             )
 
@@ -184,7 +186,49 @@ class MarketDataService:
                 self._ticker_cache[symbol] = ticker_data
                 return ticker_data
         except Exception as e:
-            logger.warning(f"Failed to fetch live Binance ticker for {symbol}: {e}")
+            logger.warning(f"Failed to fetch live Binance ticker for {symbol} via CCXT: {e}. Trying direct REST fallback...")
+            try:
+                import urllib.request
+                clean_sym = symbol.replace("/", "").upper()
+
+                def _fetch_direct():
+                    urls = [
+                        f"https://api.binance.com/api/v3/ticker/bookTicker?symbol={clean_sym}",
+                        f"https://data-api.binance.vision/api/v3/ticker/bookTicker?symbol={clean_sym}",
+                    ]
+                    for u in urls:
+                        try:
+                            req = urllib.request.Request(u, headers={"User-Agent": "KRIPTO-AGENT/6.1"})
+                            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                                return json.loads(resp.read().decode())
+                        except Exception:
+                            continue
+                    return None
+
+                loop = asyncio.get_running_loop()
+                book_res = await loop.run_in_executor(None, _fetch_direct)
+                if book_res and "bidPrice" in book_res and "askPrice" in book_res:
+                    bid = float(book_res["bidPrice"])
+                    ask = float(book_res["askPrice"])
+                    price = (bid + ask) / 2.0 if ask > 0 else bid
+                    spread = max(0.0, ask - bid)
+                    spread_bps = (spread / ask * 10000.0) if ask > 0 else 0.0
+                    ticker_data = {
+                        "symbol": symbol,
+                        "price": price,
+                        "bid": bid,
+                        "ask": ask,
+                        "spread": spread,
+                        "spread_bps": round(spread_bps, 2),
+                        "volume_24h": 0.0,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "received_at": now_ts,
+                        "source": "BINANCE_DIRECT_REST",
+                    }
+                    self._ticker_cache[symbol] = ticker_data
+                    return ticker_data
+            except Exception as direct_err:
+                logger.error(f"Direct REST fallback failed for {symbol}: {direct_err}")
 
         return None
 
@@ -255,13 +299,15 @@ class MarketDataService:
                 cap_info = self._market_caps.get(base_asset, {})
                 coin_name = cap_info.get("name") or base_asset
                 market_cap = float(cap_info.get("market_cap") or 0.0)
-                rank = int(cap_info.get("rank") or 9999)
+                has_known_mcap = base_asset in self._market_caps and "rank" in cap_info
+                rank = int(cap_info["rank"]) if has_known_mcap else 9999
 
                 results.append({
                     "symbol": symbol,
                     "name": coin_name,
                     "market_cap": market_cap,
                     "rank": rank,
+                    "has_known_mcap": has_known_mcap,
                     "price": price,
                     "bid": bid,
                     "ask": ask,
@@ -277,11 +323,25 @@ class MarketDataService:
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
 
-            # Sort by Market Cap rank (exact Binance "Top Tokens by Market Capitalization" sequence)
-            results.sort(key=lambda x: (x.get("rank", 9999), -x.get("volume_24h", 0.0)))
-            self._all_tickers_cache = results
+            # Sort by Market Cap rank for known tokens, and dynamic 24h USDT volume descending for unlisted tokens
+            known_tokens = [r for r in results if r.get("has_known_mcap")]
+            unlisted_tokens = [r for r in results if not r.get("has_known_mcap")]
+
+            # Sort known tokens by market cap rank
+            known_tokens.sort(key=lambda x: (x.get("rank", 9999), -x.get("volume_24h", 0.0)))
+
+            # Sort unlisted tokens dynamically by 24h USDT volume descending
+            unlisted_tokens.sort(key=lambda x: -x.get("volume_24h", 0.0))
+
+            # Assign dynamic ranks to unlisted tokens sequentially after known tokens
+            max_known = known_tokens[-1]["rank"] if known_tokens else 0
+            for idx, item in enumerate(unlisted_tokens, start=max_known + 1):
+                item["rank"] = idx
+
+            sorted_results = known_tokens + unlisted_tokens
+            self._all_tickers_cache = sorted_results
             self._all_tickers_ts = now_ts
-            return results
+            return sorted_results
         except Exception as e:
             logger.error(f"Failed to fetch all Binance tickers: {e}")
             return getattr(self, "_all_tickers_cache", [])
@@ -411,7 +471,7 @@ class MarketDataService:
                     latest_ts = latest_ts.replace(tzinfo=timezone.utc)
                 age = now_ts - latest_ts.timestamp()
                 if age <= (tf_sec * 2.0):
-                    return cached_candles[-limit:]
+                    return list(cached_candles[-limit:])
 
         try:
             since = int(start.timestamp() * 1000) if start else None
@@ -431,10 +491,10 @@ class MarketDataService:
                 self._candle_last_bucket[(symbol, timeframe)] = int(now_ts // tf_sec)
                 self._candle_last_fetched[(symbol, timeframe)] = now_ts
 
-            return candles
+            return list(candles) if candles else []
         except Exception as e:
             logger.error(f"Failed to fetch historical candles for {symbol} ({timeframe}): {e}")
-            return self._candle_cache.get(symbol, {}).get(timeframe, [])[-limit:] if is_live_query else []
+            return list(self._candle_cache.get(symbol, {}).get(timeframe, [])[-limit:]) if is_live_query else []
 
     async def warm_up_cache(
         self,
