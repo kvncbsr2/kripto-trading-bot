@@ -9,6 +9,10 @@ from apps.api.app.api.state import RUNTIME_STATE, command_bus, risk_engine
 from apps.api.app.middleware.auth import Role, verify_api_key_or_token
 from database.session import get_async_db
 from services.autonomous_runner import autonomous_trader
+from services.config_manager.state_persistence import (
+    load_persisted_profile_state,
+    update_persisted_state,
+)
 from services.execution.order_manager import order_manager
 from services.risk_engine.circuit_breaker import CircuitState
 from services.risk_engine.readiness_gate import ReadinessGate

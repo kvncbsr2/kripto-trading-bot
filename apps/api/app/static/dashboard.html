@@ -1904,7 +1904,8 @@
                             method: 'POST',
                             headers: getAuthHeaders()
                         });
-                        const unhaltData = await unhaltRes.json();
+                        let unhaltData = {};
+                        try { unhaltData = await unhaltRes.json(); } catch (_) { unhaltData = { success: unhaltRes.ok }; }
                         if (!unhaltRes.ok || unhaltData.success === false) {
                             showAlert(unhaltData.detail || unhaltData.message || 'Sistem kilidi kaldırılamadı.', false);
                             refreshData();
@@ -1919,7 +1920,8 @@
                     method: 'POST',
                     headers: getAuthHeaders()
                 });
-                const data = await res.json();
+                let data = {};
+                try { data = await res.json(); } catch (_) { data = { success: res.ok, message: res.ok ? 'İşlem tamamlandı' : `Sunucu yanıtı (HTTP ${res.status})` }; }
                 if (res.ok && data.success !== false) {
                     showAlert(isRunning ? 'Bot durduruldu.' : 'Bot başlatıldı! Canlı piyasa taranıyor.', true);
                 } else {
@@ -1927,7 +1929,7 @@
                 }
                 refreshData();
             } catch (e) {
-                showAlert(e.message, false);
+                showAlert(e.message || 'Bir hata oluştu.', false);
             }
         }
 
