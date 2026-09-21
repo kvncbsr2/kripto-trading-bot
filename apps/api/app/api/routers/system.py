@@ -914,15 +914,32 @@ async def post_sync_git(_role: Role = Depends(verify_api_key_or_token)):
     results = {}
 
     try:
-        # Run git pull origin main
+        # Ensure Git repo is initialized
+        git_dir = os.path.join(project_root, ".git")
+        repo_url = "https://github.com/kvncbsr2/kripto-trading-bot.git"
+        if not os.path.exists(git_dir):
+            subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True)
+            subprocess.run(["git", "remote", "add", "origin", repo_url], cwd=project_root, check=True, capture_output=True)
+
+        # Run git pull or git reset to sync with main branch
         pull_proc = subprocess.run(
-            ["git", "pull", "origin", "main"],
+            ["git", "fetch", "origin", "main"],
             cwd=project_root,
             capture_output=True,
             text=True,
             timeout=30,
         )
-        results["git_pull"] = {
+        if pull_proc.returncode == 0:
+            reset_proc = subprocess.run(
+                ["git", "reset", "--hard", "origin/main"],
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            pull_proc = reset_proc
+
+        results["git_sync"] = {
             "returncode": pull_proc.returncode,
             "stdout": pull_proc.stdout.strip(),
             "stderr": pull_proc.stderr.strip(),
