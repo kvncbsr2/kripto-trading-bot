@@ -36,6 +36,7 @@ secrets/
 
 # Database & SQLite
 *.db
+!kripto_agent.db
 *.sqlite3
 *.sqlite
 data/
