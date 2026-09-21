@@ -96,3 +96,35 @@ def test_rsi_divergence_strategy_bullish():
     assert sig is not None
     assert sig.direction == SignalDirection.LONG
     assert sig.strategy == "rsi_divergence"
+
+
+def test_evaluate_from_dataframe_adapter():
+    import numpy as np
+    import pandas as pd
+
+    # Generate synthetic 50 bars
+    dates = pd.date_range(end=datetime.now(timezone.utc), periods=50, freq="15min")
+    prices = np.linspace(100, 105, 50) + np.random.normal(0, 0.5, 50)
+    df = pd.DataFrame({
+        "timestamp": dates,
+        "open": prices - 0.2,
+        "high": prices + 0.5,
+        "low": prices - 0.5,
+        "close": prices,
+        "volume": [100.0] * 50,
+    })
+
+    tf_strat = TrendFollowingStrategy()
+    mr_strat = MeanReversionStrategy()
+    rsi_strat = RSIDivergenceStrategy()
+
+    # Verify each strategy handles DataFrame without exceptions
+    sig_tf = tf_strat.evaluate_from_dataframe(df, "BTC/USDT")
+    assert sig_tf is None or hasattr(sig_tf, "direction")
+
+    sig_mr = mr_strat.evaluate_from_dataframe(df, "BTC/USDT")
+    assert sig_mr is None or hasattr(sig_mr, "direction")
+
+    sig_rsi = rsi_strat.evaluate_from_dataframe(df, "BTC/USDT")
+    assert sig_rsi is None or hasattr(sig_rsi, "direction")
+

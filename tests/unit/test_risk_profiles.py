@@ -96,6 +96,7 @@ async def test_api_profile_endpoints():
     transport = ASGITransport(app=app)
     headers = {"X-API-KEY": settings.API_ADMIN_KEY}
 
+    apply_profile_to_system(1, source="test_api_profile_endpoints_setup")
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # 1. GET /api/v1/system/profiles
         r = await ac.get("/api/v1/system/profiles")

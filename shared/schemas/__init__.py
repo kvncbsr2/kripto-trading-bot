@@ -133,6 +133,9 @@ class RiskDecision(BaseModel):
     take_profit: float = 0.0
     risk_amount: float = 0.0
     reason: str = ""
+    signal_id: Optional[str] = None
+    entry_context: Optional[str] = None
+    entry_arm: Optional[str] = None
 
 
 # Orders & Fills
@@ -159,8 +162,12 @@ class Fill(BaseModel):
     side: OrderSide
     price: float
     quantity: float
-    fee: float
-    slippage: float
+    fee: float = 0.0
+    slippage: float = 0.0
+    configured_slippage_bps: Optional[float] = None
+    effective_slippage_bps: Optional[float] = None
+    tick_rounding_impact_bps: Optional[float] = None
+    legacy_precision_affected: bool = False
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -189,6 +196,16 @@ class Position(BaseModel):
     partial_realized_pnl: float = 0.0
     partial_fees_paid: float = 0.0
     partial_realized_at: Optional[datetime] = None
+    last_price_update_at: Optional[datetime] = None
+    price_fetch_failures: int = 0
+    price_stale: bool = False
+    signal_id: Optional[str] = None
+    entry_context: Optional[str] = None
+    entry_arm: Optional[str] = None
+    r_multiple: Optional[float] = None
+    stop_order_id: Optional[str] = None
+    close_reason: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PortfolioState(BaseModel):
@@ -203,3 +220,4 @@ class PortfolioState(BaseModel):
     is_halted: bool = False
     halt_reason: Optional[str] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    available_balance: Optional[float] = None

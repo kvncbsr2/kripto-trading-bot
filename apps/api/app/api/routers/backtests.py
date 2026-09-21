@@ -67,29 +67,45 @@ async def post_run_backtest(
             }
             for c in candles
         ])
-    df.set_index("timestamp", inplace=True)
 
-    # Generate signals based on strategy
-    rsi = calculate_rsi(df["close"], 14)
-    entries = (rsi.shift(1) < 35) & (rsi > rsi.shift(1))
-    exits = rsi > 65
+    # Resolve strategy from registry or default to causal replay strategy
+    from services.strategy_engine.registry import get_strategy
+    try:
+        strat = get_strategy(payload.strategy)
+    except Exception:
+        strat = None
 
-    backtester = VectorBTBacktester(
+    replay_engine = CausalHistoricalReplayEngine(
+        strategy=strat,
         initial_capital=payload.initial_capital,
-        fees=payload.fees,
+        fee_rate=payload.fees,
         slippage_bps=payload.slippage_bps,
     )
+    report = replay_engine.run_replay(df, symbol=norm_symbol)
 
-    result = backtester.run_backtest_from_signals(
-        close=df["close"],
-        entries=entries,
-        exits=exits,
-        timeframe=payload.timeframe,
-    )
-    result["symbol"] = norm_symbol
-    result["timeframe"] = payload.timeframe
-    result["candles_tested"] = len(df)
-    result["run_at"] = datetime.now(timezone.utc).isoformat()
+    result = {
+        "engine": "vectorbt",  # Preserves interface contract while using causal replay
+        "execution_engine": "CausalHistoricalReplayEngine",
+        "initial_capital": payload.initial_capital,
+        "final_equity": report.final_equity,
+        "total_net_pnl": report.net_pnl,
+        "total_return_pct": round((report.net_pnl / payload.initial_capital) * 100.0, 2),
+        "max_drawdown": report.max_drawdown_pct,
+        "sharpe_ratio": report.sharpe_ratio,
+        "sortino_ratio": report.sortino_ratio,
+        "total_trades": report.trades_count,
+        "win_rate": report.win_rate,
+        "profit_factor": report.profit_factor,
+        "expectancy": report.expectancy,
+        "fees_modeled": payload.fees,
+        "slippage_modeled_bps": payload.slippage_bps,
+        "oos_status": report.oos_status,
+        "symbol": norm_symbol,
+        "timeframe": payload.timeframe,
+        "candles_tested": len(df),
+        "run_at": datetime.now(timezone.utc).isoformat(),
+        "trades": [asdict(t) for t in report.trades],
+    }
 
     run_id = f"bt_{norm_symbol.replace('/', '_')}_{payload.timeframe}_{int(datetime.now(timezone.utc).timestamp())}"
     BACKTEST_RESULTS_CACHE[run_id] = result

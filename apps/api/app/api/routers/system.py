@@ -10,6 +10,7 @@ from apps.api.app.middleware.auth import Role, verify_api_key_or_token
 from database.session import get_async_db
 from services.autonomous_runner import autonomous_trader
 from services.execution.order_manager import order_manager
+from services.risk_engine.circuit_breaker import CircuitState
 from services.risk_engine.readiness_gate import ReadinessGate
 from shared.config import get_settings
 from shared.enums import TradingWorkerState
@@ -28,6 +29,8 @@ class TargetModeRequest(BaseModel):
 
 class ResetRequest(BaseModel):
     confirmation: bool = False
+    purge_learning_state: bool = False
+    experiment_id: Optional[str] = None
 
 
 class AutonomousToggleRequest(BaseModel):
@@ -48,7 +51,8 @@ async def get_system_state():
                     broker.update_market_price(sym, float(ticker["price"]))
             except Exception:
                 pass
-    snapshot = broker.get_portfolio_snapshot() if broker else {}
+    from services.paper_trading.canonical_accounting import PortfolioAccountingService
+    snapshot = PortfolioAccountingService.get_canonical_snapshot(broker=broker)
 
     active_lvl = RUNTIME_STATE.get("active_profile_level", 1)
     active_prof = RUNTIME_STATE.get("active_risk_profile")
@@ -62,37 +66,64 @@ async def get_system_state():
         from services.strategy_engine.registry import get_strategy_metadata
         active_strat = get_strategy_metadata(active_strat_id).to_dict()
 
+    from services.risk_engine.circuit_breaker import CircuitState
+    daily_pnl = snapshot.get("daily_total_pnl", 0.0)
+    daily_max_loss = getattr(risk_engine, "daily_max_loss_usd", getattr(settings, "DAILY_MAX_LOSS", 50.0))
+
+    cb = getattr(risk_engine, "circuit_breaker", None)
+    if cb and not getattr(cb, "is_suspended", False) and daily_pnl <= -daily_max_loss:
+        cb.state = CircuitState.LOCKED
+        cb.trip_reason = f"DAILY_RISK_LOCK: Daily loss reached -${abs(daily_pnl):.2f} (limit: -${daily_max_loss:.2f})"
+
+    cb_state = getattr(cb.state, "value", str(cb.state)) if (cb and hasattr(cb, "state")) else "NORMAL"
+    is_halted = cb_state in ["LOCKED", "EMERGENCY"] or RUNTIME_STATE.get("is_halted", False)
+    system_state = "HALTED" if is_halted else RUNTIME_STATE.get("system_state", "READY")
+
+    # Atomic synchronization of runtime state
+    RUNTIME_STATE["circuit_state"] = cb_state
+    RUNTIME_STATE["is_halted"] = is_halted
+    RUNTIME_STATE["system_state"] = system_state
+
     return {
         "system": "KRIPTO AGENT V6.1",
-        "system_state": RUNTIME_STATE.get("system_state", "READY"),
-        "initial_capital": snapshot.get("initial_balance", settings.INITIAL_CAPITAL),
+        "system_state": system_state,
+        "initial_capital": snapshot.get("initial_capital", settings.INITIAL_CAPITAL),
         "equity": snapshot.get("equity", settings.INITIAL_CAPITAL),
         "balance": snapshot.get("balance", settings.INITIAL_CAPITAL),
         "available_balance": snapshot.get("available_balance", snapshot.get("balance", settings.INITIAL_CAPITAL)),
         "reserved_balance": snapshot.get("reserved_balance", 0.0),
-        "daily_pnl": round(snapshot.get("unrealized_pnl", 0.0) + snapshot.get("realized_pnl", 0.0), 2),
-        "realized_pnl": snapshot.get("realized_pnl", 0.0),
-        "unrealized_pnl": snapshot.get("unrealized_pnl", 0.0),
-        "total_fees": snapshot.get("total_fees", 0.0),
-        "total_slippage": snapshot.get("total_slippage", 0.0),
+        "daily_pnl": daily_pnl,
+        "daily_total_pnl": snapshot.get("daily_total_pnl", 0.0),
+        "daily_realized_net_pnl": snapshot.get("daily_realized_net_pnl", 0.0),
+        "daily_unrealized_pnl": snapshot.get("daily_unrealized_pnl", 0.0),
+        "lifetime_realized_net_pnl": snapshot.get("lifetime_realized_net_pnl", 0.0),
+        "lifetime_equity_change": snapshot.get("lifetime_equity_change", 0.0),
+        "realized_pnl": snapshot.get("lifetime_realized_net_pnl", 0.0),
+        "unrealized_pnl": snapshot.get("daily_unrealized_pnl", 0.0),
+        "total_fees": snapshot.get("total_fees_paid", 0.0),
+        "total_slippage": snapshot.get("total_slippage_cost", 0.0),
         "open_positions_count": snapshot.get("open_positions_count", 0),
-        "max_open_positions": risk_engine.max_open_positions,
+        "max_open_positions": getattr(risk_engine, "max_open_positions_override", None) or risk_engine.max_open_positions,
         "daily_target": RUNTIME_STATE.get("daily_target", getattr(settings, "DAILY_TARGET", 100.0)),
         "daily_target_min": RUNTIME_STATE.get("daily_target_min", getattr(settings, "DAILY_TARGET_MIN", 100.0)),
         "daily_target_max": RUNTIME_STATE.get("daily_target_max", getattr(settings, "DAILY_TARGET_MAX", 150.0)),
-        "daily_max_loss": RUNTIME_STATE.get("daily_max_loss", getattr(settings, "DAILY_MAX_LOSS", 100.0)),
+        "daily_max_loss": daily_max_loss,
+        "max_trades_per_day": getattr(risk_engine, "max_trades_per_day", 10),
+        "max_scanned_symbols": getattr(settings, "MAX_UNIVERSE_SYMBOLS", 50),
         "active_profile_level": active_lvl,
         "active_risk_profile": active_prof,
         "active_strategy_id": active_strat_id,
         "active_strategy": active_strat,
-        "is_halted": RUNTIME_STATE.get("is_halted", False),
-        "circuit_state": RUNTIME_STATE.get("circuit_state", "NORMAL"),
+        "is_halted": is_halted,
+        "circuit_state": cb_state,
         "mode": "PAPER_TRADING",
         "is_spot_mode": True,
-        "is_autonomous_active": autonomous_trader.is_active,
+        "is_autonomous_active": autonomous_trader.is_active and not is_halted,
         "last_cycle_at": autonomous_trader.last_cycle_at,
         "last_action": autonomous_trader.last_action,
         "live_trading_prohibited": True,
+        "price_stale": snapshot.get("price_stale", False),
+        "stale_price_symbols": snapshot.get("stale_price_symbols", []),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -115,21 +146,9 @@ async def get_system_logs(limit: int = 50):
 @router.get("/portfolio")
 async def get_portfolio():
     broker = command_bus.broker
-    snapshot = broker.get_portfolio_snapshot() if broker else {}
-    equity = snapshot.get("equity", settings.INITIAL_CAPITAL)
-    daily_pnl = round(snapshot.get("unrealized_pnl", 0.0) + snapshot.get("realized_pnl", 0.0), 2)
-    max_dd = (settings.INITIAL_CAPITAL - equity) / settings.INITIAL_CAPITAL if equity < settings.INITIAL_CAPITAL else 0.0
-
-    return {
-        "initial_capital": settings.INITIAL_CAPITAL,
-        "balance": snapshot.get("balance", settings.INITIAL_CAPITAL),
-        "equity": equity,
-        "daily_pnl": daily_pnl,
-        "max_drawdown": round(max_dd, 4),
-        "open_positions_count": snapshot.get("open_positions_count", 0),
-        "is_halted": RUNTIME_STATE.get("is_halted", False),
-        "currency": settings.BASE_CURRENCY,
-    }
+    from services.paper_trading.canonical_accounting import PortfolioAccountingService
+    snapshot = PortfolioAccountingService.get_canonical_snapshot(broker=broker)
+    return snapshot
 
 
 @router.post("/system/mode")
@@ -166,10 +185,19 @@ async def post_system_reset(
     autonomous_trader.reset_state()
     init_cap = float(get_settings().INITIAL_CAPITAL)
     if command_bus.broker:
-        command_bus.broker.reset_portfolio(init_cap)
+        if hasattr(command_bus.broker, "reset_paper_account"):
+            command_bus.broker.reset_paper_account(
+                init_cap,
+                purge_learning_state=payload.purge_learning_state,
+                experiment_id=payload.experiment_id,
+            )
+        else:
+            command_bus.broker.reset_portfolio(init_cap)
         if hasattr(command_bus.broker, "unhalt"):
             command_bus.broker.unhalt()
     risk_engine.circuit_breaker.reset(baseline_trade_count=0)
+    if hasattr(risk_engine.circuit_breaker, "resume"):
+        risk_engine.circuit_breaker.resume(source="reset_experiment")
     risk_engine.trades_today = 0
     risk_engine.daily_realized_pnl = 0.0
     autonomous_trader.cycle_count = 0
@@ -185,7 +213,13 @@ async def post_system_reset(
     RUNTIME_STATE["daily_pnl"] = 0.0
     RUNTIME_STATE["open_positions"] = []
     RUNTIME_STATE["closed_positions"] = []
-    return {"status": "SUCCESS", "message": f"Paper portföyü ve sistem sıfırlandı. ${init_cap:,.2f} bakiye hazır."}
+    reset_mode_str = "COLD_RESET_WITH_LEARNING_PURGE" if payload.purge_learning_state else "LEDGER_ONLY_RESET"
+    desc = "Tüm öğrenme modelleri (DPO, bandit, adaptif state) ve defter temizlendi (COLD RESET)" if payload.purge_learning_state else "Sadece paper defteri/pozisyonlar temizlendi, öğrenme modelleri korundu (WARM RESET)"
+    return {
+        "status": "SUCCESS",
+        "mode": reset_mode_str,
+        "message": f"{desc}. ${init_cap:,.2f} bakiye hazır.",
+    }
 
 
 @router.get("/system/audit-log")
@@ -207,7 +241,7 @@ async def get_autonomous_status():
         "last_action": autonomous_trader.last_action,
         "last_cycle_at": autonomous_trader.last_cycle_at,
         "open_positions": len(command_bus.broker.open_positions) if command_bus.broker else 0,
-        "max_open_positions": risk_engine.max_open_positions,
+        "max_open_positions": getattr(risk_engine, "max_open_positions_override", None) or risk_engine.max_open_positions,
     }
 
 
@@ -263,8 +297,9 @@ async def post_emergency_shutdown(
     # 3. Transition system and circuit state to EMERGENCY
     RUNTIME_STATE["is_halted"] = True
     RUNTIME_STATE["system_state"] = "RISK_LOCK"
-    RUNTIME_STATE["circuit_state"] = "EMERGENCY"
-    risk_engine.circuit_breaker.state = "EMERGENCY"
+    RUNTIME_STATE["circuit_state"] = CircuitState.EMERGENCY.value
+    if hasattr(risk_engine, "circuit_breaker") and risk_engine.circuit_breaker:
+        risk_engine.circuit_breaker.state = CircuitState.EMERGENCY
 
     open_pos_count = len(command_bus.broker.open_positions) if command_bus.broker else 0
     command_bus._log_audit(
@@ -314,7 +349,12 @@ async def post_system_unhalt(
         autonomous_trader.reset_state()
     if broker and hasattr(broker, "unhalt"):
         broker.unhalt()
-    risk_engine.circuit_breaker.reset(baseline_trade_count=len(closed))
+    if force and hasattr(risk_engine.circuit_breaker, "suspend"):
+        risk_engine.circuit_breaker.suspend(source="user_force_unhalt")
+    else:
+        if hasattr(risk_engine.circuit_breaker, "resume"):
+            risk_engine.circuit_breaker.resume(source="user_unhalt")
+        risk_engine.circuit_breaker.reset(baseline_trade_count=len(closed))
     command_bus._log_audit("UNHALT_SYSTEM", {"force": force, "baseline_trade_count": len(closed)}, True, {"system_state": "READY", "is_halted": False})
 
     return {
@@ -355,14 +395,21 @@ async def post_start_agent(
 
     # 4. Advance circuit breaker baseline and start trader
     RUNTIME_STATE["is_halted"] = False
-    RUNTIME_STATE["circuit_state"] = "NORMAL"
-    RUNTIME_STATE["system_state"] = "TRADING"
-    risk_engine.circuit_breaker.reset(baseline_trade_count=len(closed))
+    if force and hasattr(risk_engine.circuit_breaker, "suspend"):
+        risk_engine.circuit_breaker.suspend(source="user_force_unhalt")
+    else:
+        if hasattr(risk_engine.circuit_breaker, "resume"):
+            risk_engine.circuit_breaker.resume(source="user_start")
+        risk_engine.circuit_breaker.reset(baseline_trade_count=len(closed))
     try:
         autonomous_trader.start()
     except RuntimeError as e:
         if "already RUNNING" in str(e):
-            return {"success": True, "status": "ALREADY_RUNNING", "system_state": "TRADING", "message": str(e)}
+            autonomous_trader.is_active = True
+            autonomous_trader.last_action = "Otonom motor aktif. Gerçek piyasa taranıyor."
+            autonomous_trader._sync_runtime_state()
+            RUNTIME_STATE["is_autonomous_active"] = True
+            return {"success": True, "status": "STARTED", "system_state": "TRADING", "message": "Otonom ajan aktif edildi."}
         raise
     RUNTIME_STATE["is_autonomous_active"] = True
     command_bus._log_audit("START_AGENT", {"unhalt": unhalt, "force": force, "baseline_trade_count": len(closed)}, True, {"system_state": "TRADING"})
@@ -425,6 +472,8 @@ async def post_risk_config(
         updated["daily_max_loss_usd"] = loss_usd
     if payload.max_open_positions is not None:
         risk_engine.max_open_positions = payload.max_open_positions
+        RUNTIME_STATE["max_open_positions"] = payload.max_open_positions
+        RUNTIME_STATE["max_open_positions_override"] = payload.max_open_positions
         updated["max_open_positions"] = payload.max_open_positions
     if payload.atr_multiplier is not None:
         updated["atr_multiplier"] = payload.atr_multiplier
@@ -651,14 +700,44 @@ async def get_system_profiles():
 @router.get("/api/v1/system/profile/current")
 @router.get("/system/profile/current")
 async def get_current_profile():
-    """Returns the currently active risk profile."""
+    """Returns the currently active risk profile along with live risk engine state."""
     from services.config_manager.risk_profiles import get_profile
+    from apps.api.app.api.state import risk_engine
     active_lvl = RUNTIME_STATE.get("active_profile_level", 1)
     prof = get_profile(active_lvl)
+
+    cb_suspended = getattr(getattr(risk_engine, "circuit_breaker", None), "is_suspended", False)
+
+    eff_engine_max_pos = getattr(risk_engine, "max_open_positions_override", None) or getattr(risk_engine, "max_open_positions", None)
+
+    discrepancies = []
+    if getattr(risk_engine, "risk_per_trade", None) != prof.risk_per_trade:
+        discrepancies.append(f"risk_per_trade mismatch: engine={risk_engine.risk_per_trade} vs profile={prof.risk_per_trade}")
+    if eff_engine_max_pos != min(prof.max_open_positions, 8):
+        discrepancies.append(f"max_open_positions mismatch: engine={eff_engine_max_pos} vs profile={prof.max_open_positions}")
+    if getattr(risk_engine, "daily_max_loss_usd", None) != prof.daily_max_loss:
+        discrepancies.append(f"daily_max_loss mismatch: engine={risk_engine.daily_max_loss_usd} vs profile={prof.daily_max_loss}")
+
+    is_consistent = len(discrepancies) == 0
+
+    live_risk = {
+        "risk_per_trade": getattr(risk_engine, "risk_per_trade", None),
+        "max_open_positions": eff_engine_max_pos,
+        "daily_max_loss_usd": getattr(risk_engine, "daily_max_loss_usd", None),
+        "daily_target_max": getattr(risk_engine, "daily_target_max", None),
+        "target_mode": getattr(risk_engine, "target_mode", None),
+        "min_risk_reward": getattr(risk_engine, "min_risk_reward", None),
+        "circuit_breaker_suspended": cb_suspended,
+    }
+
     return {
-        "success": True,
+        "success": is_consistent,
+        "is_consistent": is_consistent,
+        "discrepancies": discrepancies,
+        "circuit_breaker_suspended": cb_suspended,
         "active_level": active_lvl,
         "profile": prof.to_dict(),
+        "live_risk_engine": live_risk,
     }
 
 
@@ -730,5 +809,95 @@ async def set_system_strategy(
         )
     res = apply_strategy_to_system(payload.strategy_id)
     return res
+
+
+@router.get("/api/v1/learning/bandit-state")
+@router.get("/learning/bandit-state")
+async def get_bandit_state():
+    """
+    Returns real-time Bayesian Contextual Bandit state:
+    Active arms, 6 market contexts, Normal-Gamma posteriors (mu, n, alpha, beta),
+    quarantine status, and optimal policy by context.
+    """
+    from services.learning.contextual_bandit import contextual_bandit
+    return contextual_bandit.get_state_dict()
+
+
+@router.get("/api/v1/learning/dpo-metrics")
+@router.get("/learning/dpo-metrics")
+async def get_dpo_metrics():
+    """
+    Returns real-time DPO Signal Gate metrics, preference flywheel stats,
+    and model training status.
+    """
+    from services.learning.dpo_signal_gate import dpo_signal_gate
+    return {
+        "success": True,
+        "metrics": dpo_signal_gate.get_metrics(),
+    }
+
+
+@router.post("/api/v1/learning/dpo-retrain")
+async def post_dpo_retrain(_role: Role = Depends(verify_api_key_or_token)):
+    """
+    Triggers on-demand training of the DPO Signal Gate with the latest preference pairs.
+    """
+    from services.learning.dpo_signal_gate import dpo_signal_gate
+    success = dpo_signal_gate.train()
+    return {
+        "success": success,
+        "metrics": dpo_signal_gate.get_metrics(),
+    }
+
+
+@router.get("/api/v1/learning/status")
+@router.get("/learning/status")
+async def get_learning_status():
+    """
+    Returns unified evidence-based learning system status:
+    - Model lifecycle state & manifests (SHADOW isolation)
+    - Signal Gate Walk-Forward validation & calibration metrics
+    - Adaptive parameter states and ledger reconciliation
+    - Contextual Bandit strategy-level posteriors
+    - Decision logging telemetry
+    """
+    from services.learning.model_lifecycle import model_lifecycle_manager
+    from services.learning.signal_gate_engine import signal_gate_engine
+    from services.learning.decision_logger import decision_logger
+    from services.strategy_engine.adaptive_learning import adaptive_learning_engine
+    from services.learning.contextual_bandit import contextual_bandit
+
+    return {
+        "success": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "model_lifecycle": {
+            "active_version": model_lifecycle_manager.active_model_version,
+            "manifest": model_lifecycle_manager.get_active_manifest(),
+        },
+        "signal_gate": signal_gate_engine.get_metrics(),
+        "adaptive_learning": adaptive_learning_engine.get_summary(),
+        "decision_logger": decision_logger.get_summary(),
+        "bandit": {
+            "total_arms": len(contextual_bandit.arms),
+            "contexts": list(contextual_bandit.contexts.keys()),
+        },
+    }
+
+
+@router.get("/api/v1/learning/decisions")
+@router.get("/learning/decisions")
+async def get_recent_decisions(limit: int = 50):
+    """
+    Returns recent candidate signal decision logs with shadow gate scores,
+    risk engine outcomes, and execution links.
+    """
+    from services.learning.decision_logger import decision_logger
+    decisions = decision_logger.get_recent_decisions(limit=limit)
+    return {
+        "success": True,
+        "count": len(decisions),
+        "decisions": decisions,
+    }
+
 
 

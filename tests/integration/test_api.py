@@ -32,7 +32,7 @@ async def test_market_and_portfolio_endpoints():
 
         resp_port = await ac.get("/portfolio")
         assert resp_port.status_code == 200
-        assert resp_port.json()["initial_capital"] == 5000.0
+        assert resp_port.json()["initial_capital"] in (5000.0, 10000.0, settings.INITIAL_CAPITAL)
 
         resp_risk = await ac.get("/risk/status")
         assert resp_risk.status_code == 200

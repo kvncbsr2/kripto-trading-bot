@@ -47,6 +47,8 @@ class PortfolioTracker:
             pos = self.positions[symbol]
             if pos.status == PositionStatus.OPEN:
                 pos.current_price = current_price
+                pos.last_price_update_at = datetime.now(timezone.utc)
+                pos.price_fetch_failures = 0
                 if pos.side == PositionSide.LONG:
                     pos.unrealized_pnl = (current_price - pos.entry_price) * pos.quantity
                 else:

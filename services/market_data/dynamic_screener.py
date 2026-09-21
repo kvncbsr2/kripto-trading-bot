@@ -8,18 +8,27 @@ from shared.logging import get_logger
 
 logger = get_logger("dynamic-screener", service="scanner")
 
-# Pairs to strictly exclude (Stablecoins, fiat, wrapped assets, or leveraged tokens)
+# Pairs to strictly exclude (Stablecoins, fiat, wrapped assets, leveraged tokens, or tokenized equities)
 EXCLUDED_SUBSTRINGS = [
     "UPUSDT", "DOWNUSDT", "BULLUSDT", "BEARUSDT",
     "USDCUSDT", "FDUSDUSDT", "TUSDUSDT", "EURUSDT",
     "USD1USDT", "AEURUSDT", "WBTCUSDT", "BUSDUSDT",
-    "DAIUSDT", "USDPUSDT"
+    "DAIUSDT", "USDPUSDT",
+    # Tokenized stocks and synthetic equities
+    "NVDABUSDT", "TSLABUSDT", "QQQBUSDT", "AMZNBUSDT", "AAPLBUSDT",
+    "MSFTBUSDT", "GOOGBUSDT", "METABUSDT", "COINBUSDT", "SPYBUSDT",
+]
+
+# Tier 1 Quant-Validated Edge Pairs (from 1-year 25-coin backtest)
+TIER1_EDGE_SYMBOLS = [
+    "ZEC/USDT", "RAY/USDT", "THE/USDT", "UNI/USDT", "PEPE/USDT", "WLD/USDT"
 ]
 
 FALLBACK_SYMBOLS = [
     "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",
+    "ZEC/USDT", "RAY/USDT", "THE/USDT", "UNI/USDT", "PEPE/USDT", "WLD/USDT",
     "DOGE/USDT", "NEAR/USDT", "AVAX/USDT", "LINK/USDT", "ADA/USDT",
-    "SUI/USDT", "PEPE/USDT"
+    "SUI/USDT"
 ]
 
 
@@ -131,13 +140,20 @@ class DynamicUniverseScreener:
                 f"{item['raw_symbol'][:-4]}/USDT" for item in top_volume
             ]
 
-            # Ensure BTC is always present for regime monitoring
-            if "BTC/USDT" not in formatted_symbols:
-                formatted_symbols.insert(0, "BTC/USDT")
+            # Prioritize Tier 1 quant-validated edge pairs (front of the scan queue)
+            for tier1_sym in reversed(TIER1_EDGE_SYMBOLS):
+                if tier1_sym in formatted_symbols:
+                    formatted_symbols.remove(tier1_sym)
+                formatted_symbols.insert(0, tier1_sym)
+
+            # Ensure BTC is always at index 0 for regime monitoring
+            if "BTC/USDT" in formatted_symbols:
+                formatted_symbols.remove("BTC/USDT")
+            formatted_symbols.insert(0, "BTC/USDT")
 
             self._cached_symbols = formatted_symbols
             self._last_screen_time = now
-            logger.info(f"Dynamic Universe Screen Complete: {len(formatted_symbols)} liquid pairs selected.")
+            logger.info(f"Dynamic Universe Screen Complete: {len(formatted_symbols)} liquid pairs selected (Tier 1 edge prioritized).")
             return self._cached_symbols
 
         except Exception as e:

@@ -148,7 +148,9 @@ def test_partial_exit_with_fees_and_trailing():
     pos = engine.open_positions["ETH/USDT"]
     assert pos.quantity == 0.5
     assert pos.partial_tp_hit is True
-    assert pos.stop_loss == 1000.0
+    # Fee-inclusive break-even stop raises stop above entry price to cover round-trip taker fees and slippage
+    assert pos.stop_loss >= 1000.0
+    assert round(pos.stop_loss, 2) == 1002.0
 
     # 2. Price continues running to $1150 (peak lock trails stop higher to $1075)
     engine.check_position_stops_and_targets(

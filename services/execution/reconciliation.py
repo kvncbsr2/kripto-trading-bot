@@ -150,9 +150,8 @@ class ReconciliationEngine:
 
             # Compare local open orders with exchange open orders
             for oid, order in local_orders.items():
-                status_val = getattr(order, "status", None)
-                if hasattr(status_val, "value"):
-                    status_val = status_val.value
+                status_raw = getattr(order, "status", None)
+                status_val = status_raw.value if hasattr(status_raw, "value") else str(status_raw or "")
 
                 if status_val in ["SUBMITTED", "OPEN"]:
                     if oid not in exchange_order_ids:

@@ -25,6 +25,9 @@ class RobustnessReport:
     parameter_plateau_stable: bool
     regime_dependence: str
     coin_dependence: str
+    has_lookahead_violation: bool = False
+    is_trades_count: int = 0
+    regimes_profitable_count: int = 0
     reasons: List[str] = field(default_factory=list)
     detailed_metrics: Dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -154,6 +157,9 @@ class OverfittingProtectionEngine:
                 parameter_plateau_stable=False,
                 regime_dependence="DISQUALIFIED",
                 coin_dependence="DISQUALIFIED",
+                has_lookahead_violation=True,
+                is_trades_count=is_trades_count,
+                regimes_profitable_count=regimes_profitable_count,
                 reasons=["LOOKAHEAD_VIOLATION: Strategy accessed future data."],
             )
 
@@ -245,6 +251,9 @@ class OverfittingProtectionEngine:
             parameter_plateau_stable=plateau_score >= 65.0,
             regime_dependence=regime_dependence,
             coin_dependence=coin_dependence,
+            has_lookahead_violation=has_lookahead_violation,
+            is_trades_count=is_trades_count,
+            regimes_profitable_count=regimes_profitable_count,
             reasons=reasons,
             detailed_metrics={
                 "c_oos": round(c_oos, 1),

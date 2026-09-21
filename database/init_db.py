@@ -28,6 +28,20 @@ async def init_models_async():
                 logger.info("TimescaleDB hypertables created successfully.")
             except Exception as e:
                 logger.warning(f"TimescaleDB hypertable setup skipped or not supported: {e}")
+        # Safe column migration for SQLite positions table
+        try:
+            res = await conn.execute(text("PRAGMA table_info(positions);"))
+            existing_cols = {row[1] for row in res.fetchall()}
+            if existing_cols:
+                if "price_stale" not in existing_cols:
+                    await conn.execute(text("ALTER TABLE positions ADD COLUMN price_stale BOOLEAN DEFAULT 0;"))
+                if "price_fetch_failures" not in existing_cols:
+                    await conn.execute(text("ALTER TABLE positions ADD COLUMN price_fetch_failures INTEGER DEFAULT 0;"))
+                if "last_price_update_at" not in existing_cols:
+                    await conn.execute(text("ALTER TABLE positions ADD COLUMN last_price_update_at TIMESTAMP NULL;"))
+        except Exception as e:
+            logger.debug(f"positions column migration skipped: {e}")
+
     logger.info("Database tables verified and initialized successfully.")
 
 

@@ -20,6 +20,49 @@ logger = get_logger("paper-execution-engine", service="execution")
 settings = get_settings()
 
 
+def get_price_precision(price: float) -> int:
+    """
+    Dynamically determines decimal precision based on price magnitude.
+    Prevents rounding distortion where 5 bps slippage turns into 0 bps or thousands of bps on micro assets.
+    """
+    p = abs(price)
+    if p >= 100.0:
+        return 2
+    elif p >= 1.0:
+        return 4
+    elif p >= 0.01:
+        return 6
+    elif p >= 0.0001:
+        return 8
+    else:
+        return 10
+
+
+def normalize_exchange_price(price: float, tick_size: float = 0.01, is_buy: bool = True) -> float:
+    """
+    Normalizes price according to exchange tickSize with directional rounding:
+    - BUY: rounds up (ceiling) so execution doesn't fail on fill limit
+    - SELL: rounds down (floor)
+    """
+    from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+    p_dec = Decimal(str(price))
+    tick_dec = Decimal(str(tick_size))
+    rounding = ROUND_CEILING if is_buy else ROUND_FLOOR
+    normalized = (p_dec / tick_dec).to_integral_value(rounding=rounding) * tick_dec
+    return float(normalized)
+
+
+def normalize_exchange_quantity(quantity: float, step_size: float = 0.001) -> float:
+    """
+    Normalizes quantity according to exchange stepSize (always floors to avoid balance overrun).
+    """
+    from decimal import Decimal, ROUND_FLOOR
+    q_dec = Decimal(str(quantity))
+    step_dec = Decimal(str(step_size))
+    normalized = (q_dec / step_dec).to_integral_value(rounding=ROUND_FLOOR) * step_dec
+    return float(normalized)
+
+
 class PaperExecutionEngine(ExecutionEngine):
     """
     Unified, authoritative Paper Execution Engine for KRIPTO AGENT V6.1.
@@ -43,6 +86,7 @@ class PaperExecutionEngine(ExecutionEngine):
         maker_fee: Optional[float] = None,
         taker_fee: Optional[float] = None,
         slippage_bps: Optional[float] = None,
+        slippage_rate: Optional[float] = None,
         enable_trailing_stop: bool = True,
         enable_partial_exit: bool = True,
         is_spot_mode: bool = True,
@@ -55,7 +99,9 @@ class PaperExecutionEngine(ExecutionEngine):
             maker_fee = getattr(cfg, "MAKER_FEE", 0.001)
         if taker_fee is None:
             taker_fee = getattr(cfg, "TAKER_FEE", 0.001)
-        if slippage_bps is None:
+        if slippage_rate is not None and slippage_bps is None:
+            slippage_bps = slippage_rate * 10000.0
+        elif slippage_bps is None:
             slippage_bps = getattr(cfg, "SLIPPAGE_BPS", 5.0)
 
         self.db_path = db_path
@@ -158,7 +204,14 @@ class PaperExecutionEngine(ExecutionEngine):
                         partial_tp_hit INTEGER DEFAULT 0,
                         partial_realized_pnl REAL DEFAULT 0.0,
                         partial_fees_paid REAL DEFAULT 0.0,
-                        partial_realized_at TEXT
+                        partial_realized_at TEXT,
+                        signal_id TEXT,
+                        entry_context TEXT,
+                        entry_arm TEXT,
+                        r_multiple REAL,
+                        price_stale INTEGER DEFAULT 0,
+                        price_fetch_failures INTEGER DEFAULT 0,
+                        last_price_update_at TEXT
                     )
                 """)
                 # Defensive migrations for existing databases
@@ -170,6 +223,13 @@ class PaperExecutionEngine(ExecutionEngine):
                     ("partial_realized_pnl", "REAL DEFAULT 0.0"),
                     ("partial_fees_paid", "REAL DEFAULT 0.0"),
                     ("partial_realized_at", "TEXT"),
+                    ("signal_id", "TEXT"),
+                    ("entry_context", "TEXT"),
+                    ("entry_arm", "TEXT"),
+                    ("r_multiple", "REAL"),
+                    ("price_stale", "INTEGER DEFAULT 0"),
+                    ("price_fetch_failures", "INTEGER DEFAULT 0"),
+                    ("last_price_update_at", "TEXT"),
                 ]:
                     try:
                         conn.execute(f"ALTER TABLE paper_positions ADD COLUMN {col_name} {col_type}")
@@ -202,9 +262,34 @@ class PaperExecutionEngine(ExecutionEngine):
                         quantity REAL NOT NULL,
                         fee REAL NOT NULL,
                         slippage REAL NOT NULL,
-                        timestamp TEXT NOT NULL
+                        timestamp TEXT NOT NULL,
+                        configured_slippage_bps REAL,
+                        effective_slippage_bps REAL,
+                        tick_rounding_impact_bps REAL,
+                        legacy_precision_affected INTEGER DEFAULT 0
                     )
                 """)
+                # Defensive migrations for paper_fills
+                for col_name, col_type in [
+                    ("configured_slippage_bps", "REAL"),
+                    ("effective_slippage_bps", "REAL"),
+                    ("tick_rounding_impact_bps", "REAL"),
+                    ("legacy_precision_affected", "INTEGER DEFAULT 0"),
+                ]:
+                    try:
+                        conn.execute(f"ALTER TABLE paper_fills ADD COLUMN {col_name} {col_type}")
+                    except sqlite3.OperationalError:
+                        pass
+
+                # Tag legacy un-migrated fills as legacy_precision_affected without rewriting
+                try:
+                    conn.execute("""
+                        UPDATE paper_fills
+                        SET legacy_precision_affected = 1
+                        WHERE configured_slippage_bps IS NULL AND legacy_precision_affected = 0
+                    """)
+                except Exception:
+                    pass
         finally:
             self._close_db_conn(conn)
 
@@ -246,6 +331,7 @@ class PaperExecutionEngine(ExecutionEngine):
             closed_iso = pos.closed_at.isoformat() if (pos.closed_at and hasattr(pos.closed_at, "isoformat")) else (str(pos.closed_at) if pos.closed_at else None)
             side_str = pos.side.value if hasattr(pos.side, "value") else str(pos.side)
             status_str = pos.status.value if hasattr(pos.status, "value") else str(pos.status)
+            last_price_iso = pos.last_price_update_at.isoformat() if (getattr(pos, "last_price_update_at", None) and hasattr(pos.last_price_update_at, "isoformat")) else (str(pos.last_price_update_at) if getattr(pos, "last_price_update_at", None) else None)
             with conn:
                 conn.execute("""
                     INSERT INTO paper_positions (
@@ -253,9 +339,11 @@ class PaperExecutionEngine(ExecutionEngine):
                         stop_loss, take_profit, unrealized_pnl, realized_pnl, status,
                         opened_at, closed_at, fees_paid, strategy, peak_price,
                         initial_quantity, initial_stop_loss, risk_dist, partial_tp_hit,
-                        partial_realized_pnl, partial_fees_paid, partial_realized_at
+                        partial_realized_pnl, partial_fees_paid, partial_realized_at,
+                        signal_id, entry_context, entry_arm, r_multiple,
+                        price_stale, price_fetch_failures, last_price_update_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(position_id) DO UPDATE SET
                         quantity=excluded.quantity,
                         stop_loss=excluded.stop_loss,
@@ -273,7 +361,14 @@ class PaperExecutionEngine(ExecutionEngine):
                         partial_tp_hit=excluded.partial_tp_hit,
                         partial_realized_pnl=excluded.partial_realized_pnl,
                         partial_fees_paid=excluded.partial_fees_paid,
-                        partial_realized_at=excluded.partial_realized_at
+                        partial_realized_at=excluded.partial_realized_at,
+                        signal_id=COALESCE(excluded.signal_id, paper_positions.signal_id),
+                        entry_context=COALESCE(excluded.entry_context, paper_positions.entry_context),
+                        entry_arm=COALESCE(excluded.entry_arm, paper_positions.entry_arm),
+                        r_multiple=excluded.r_multiple,
+                        price_stale=excluded.price_stale,
+                        price_fetch_failures=excluded.price_fetch_failures,
+                        last_price_update_at=excluded.last_price_update_at
                 """, (
                     pos.position_id, pos.symbol, side_str, pos.entry_price, pos.quantity, pos.current_price,
                     pos.stop_loss, pos.take_profit, pos.unrealized_pnl, pos.realized_pnl, status_str,
@@ -285,6 +380,13 @@ class PaperExecutionEngine(ExecutionEngine):
                     getattr(pos, "partial_realized_pnl", 0.0),
                     getattr(pos, "partial_fees_paid", 0.0),
                     pos.partial_realized_at.isoformat() if getattr(pos, "partial_realized_at", None) else None,
+                    getattr(pos, "signal_id", None),
+                    getattr(pos, "entry_context", None),
+                    getattr(pos, "entry_arm", None),
+                    getattr(pos, "r_multiple", None),
+                    1 if getattr(pos, "price_stale", False) else 0,
+                    getattr(pos, "price_fetch_failures", 0),
+                    last_price_iso,
                 ))
         except Exception as e:
             logger.error(f"Failed to persist position {pos.position_id}: {e}")
@@ -328,11 +430,18 @@ class PaperExecutionEngine(ExecutionEngine):
         try:
             ts_iso = fill.timestamp.isoformat() if hasattr(fill.timestamp, "isoformat") else str(fill.timestamp)
             side_str = fill.side.value if hasattr(fill.side, "value") else str(fill.side)
+            conf_bps = getattr(fill, "configured_slippage_bps", None)
+            eff_bps = getattr(fill, "effective_slippage_bps", None)
+            tick_impact = getattr(fill, "tick_rounding_impact_bps", None)
+            leg_flag = 1 if getattr(fill, "legacy_precision_affected", False) else 0
             with conn:
                 conn.execute("""
-                    INSERT OR IGNORE INTO paper_fills (fill_id, order_id, symbol, side, price, quantity, fee, slippage, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (fill.fill_id, fill.order_id, fill.symbol, side_str, fill.price, fill.quantity, fill.fee, fill.slippage, ts_iso))
+                    INSERT OR IGNORE INTO paper_fills (
+                        fill_id, order_id, symbol, side, price, quantity, fee, slippage, timestamp,
+                        configured_slippage_bps, effective_slippage_bps, tick_rounding_impact_bps, legacy_precision_affected
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (fill.fill_id, fill.order_id, fill.symbol, side_str, fill.price, fill.quantity, fill.fee, fill.slippage, ts_iso, conf_bps, eff_bps, tick_impact, leg_flag))
         except Exception as e:
             logger.error(f"Failed to persist fill {fill.fill_id}: {e}")
         finally:
@@ -383,6 +492,12 @@ class PaperExecutionEngine(ExecutionEngine):
             # 3. Restore fills
             cur.execute("SELECT * FROM paper_fills")
             for r in cur.fetchall():
+                col_keys = r.keys() if hasattr(r, "keys") else []
+                conf_bps = float(r["configured_slippage_bps"]) if ("configured_slippage_bps" in col_keys and r["configured_slippage_bps"] is not None) else None
+                eff_bps = float(r["effective_slippage_bps"]) if ("effective_slippage_bps" in col_keys and r["effective_slippage_bps"] is not None) else None
+                tick_impact = float(r["tick_rounding_impact_bps"]) if ("tick_rounding_impact_bps" in col_keys and r["tick_rounding_impact_bps"] is not None) else None
+                leg_flag = bool(r["legacy_precision_affected"]) if ("legacy_precision_affected" in col_keys and r["legacy_precision_affected"] is not None) else False
+
                 fill_obj = Fill(
                     fill_id=r["fill_id"],
                     order_id=r["order_id"],
@@ -392,6 +507,10 @@ class PaperExecutionEngine(ExecutionEngine):
                     quantity=float(r["quantity"]),
                     fee=float(r["fee"]),
                     slippage=float(r["slippage"]),
+                    configured_slippage_bps=conf_bps,
+                    effective_slippage_bps=eff_bps,
+                    tick_rounding_impact_bps=tick_impact,
+                    legacy_precision_affected=leg_flag,
                     timestamp=datetime.fromisoformat(r["timestamp"]),
                 )
                 self.fills.append(fill_obj)
@@ -424,10 +543,39 @@ class PaperExecutionEngine(ExecutionEngine):
                     partial_fees_paid=float(r["partial_fees_paid"]) if ("partial_fees_paid" in r.keys() and r["partial_fees_paid"] is not None) else 0.0,
                     partial_realized_at=datetime.fromisoformat(r["partial_realized_at"]) if ("partial_realized_at" in r.keys() and r["partial_realized_at"]) else None,
                 )
+                if "price_stale" in r.keys() and r["price_stale"] is not None:
+                    pos_obj.price_stale = bool(r["price_stale"])
+                if "price_fetch_failures" in r.keys() and r["price_fetch_failures"] is not None:
+                    pos_obj.price_fetch_failures = int(r["price_fetch_failures"])
+                if "last_price_update_at" in r.keys() and r["last_price_update_at"]:
+                    try:
+                        pos_obj.last_price_update_at = datetime.fromisoformat(r["last_price_update_at"])
+                    except Exception:
+                        pass
+
                 if pos_obj.status == PositionStatus.OPEN:
                     self.open_positions[pos_obj.symbol] = pos_obj
                 else:
                     self.closed_positions_history.append(pos_obj)
+
+            # Authoritative Ledger Reconciliation:
+            # Reconcile reserved_balance and balance strictly from position ledger
+            if self.closed_positions_history or self.open_positions:
+                total_closed_pnl = sum(float(p.realized_pnl or 0.0) for p in self.closed_positions_history)
+                total_partial_pnl = sum(float(getattr(p, "partial_realized_pnl", 0.0) or 0.0) for p in self.open_positions.values())
+                open_entry_fees = sum(float(p.fees_paid or 0.0) for p in self.open_positions.values())
+                actual_reserved = sum(float(p.entry_price) * float(p.quantity) for p in self.open_positions.values())
+                expected_balance = round(self.initial_balance + total_closed_pnl + total_partial_pnl - open_entry_fees, 4)
+
+                if abs(self.balance - expected_balance) > 0.05 or abs(self.reserved_balance - actual_reserved) > 0.05:
+                    logger.warning(
+                        f"Ledger reconciliation applied on restore: Corrected balance ${self.balance:.2f} -> ${expected_balance:.2f}, "
+                        f"Reserved ${self.reserved_balance:.2f} -> ${actual_reserved:.2f} from {len(self.closed_positions_history)} closed and {len(self.open_positions)} open positions."
+                    )
+                    self.balance = expected_balance
+                    self.reserved_balance = round(actual_reserved, 4)
+                    self.available_balance = round(max(0.0, self.balance - self.reserved_balance), 4)
+                    self._persist_account()
 
             if acc_row or self.orders or self.open_positions:
                 logger.info(
@@ -440,12 +588,25 @@ class PaperExecutionEngine(ExecutionEngine):
         finally:
             self._close_db_conn(conn)
 
-    def reset_portfolio(self, initial_balance: Optional[float] = None):
+    _restore_state_from_db = restore_state
+
+    def reset_paper_account(
+        self,
+        initial_balance: Optional[float] = None,
+        purge_learning_state: bool = False,
+        experiment_id: Optional[str] = None,
+    ):
         """
-        Resets the paper trading account and in-memory containers to a fresh clean state.
-        Clears all open positions, closed positions history, orders, and fills.
-        Wipes paper tables from SQLite persistence.
+        Resets the paper trading account and in-memory containers.
+        Supports two distinct scientific modalities:
+        1. Ledger-Only Reset: Clears open/closed paper positions while preserving learned model weights.
+        2. Cold Reset (purge_learning_state=True): Atomically purges ledger AND resets adaptive parameters,
+           reflections, DPO preference pairs, and bandit posteriors to eliminate data cross-contamination.
+        Records experiment metadata in the experiments table for lineage traceability.
         """
+        import json
+        import uuid
+
         if initial_balance is None:
             initial_balance = getattr(get_settings(), "INITIAL_CAPITAL", 5000.0)
         self.initial_balance = initial_balance
@@ -460,6 +621,8 @@ class PaperExecutionEngine(ExecutionEngine):
         self.day_start_equity = initial_balance
         self.day_start_date = datetime.now(timezone.utc).date()
 
+        exp_id = experiment_id or f"exp_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+
         if self.db_path:
             conn = self._get_db_conn()
             if conn:
@@ -468,7 +631,48 @@ class PaperExecutionEngine(ExecutionEngine):
                         conn.execute("DELETE FROM paper_positions")
                         conn.execute("DELETE FROM paper_orders")
                         conn.execute("DELETE FROM paper_fills")
+
+                        if purge_learning_state:
+                            conn.execute("DELETE FROM adaptive_learning_state")
+                            conn.execute("DELETE FROM trade_reflections")
+                            conn.execute("DELETE FROM dpo_preference_pairs")
+                            conn.execute("DELETE FROM bandit_posteriors")
+                            conn.execute("DELETE FROM bandit_processed_trades")
+                            logger.info("Cold Reset: purged adaptive learning state, trade reflections, DPO pairs, and bandit posteriors.")
+
+                        # Experiment Lineage Tracking Table
+                        conn.execute("""
+                            CREATE TABLE IF NOT EXISTS experiments (
+                                experiment_id TEXT PRIMARY KEY,
+                                started_at TEXT NOT NULL,
+                                reset_type TEXT NOT NULL,
+                                learning_state_inherited INTEGER NOT NULL,
+                                initial_capital REAL NOT NULL,
+                                fee_model TEXT NOT NULL,
+                                slippage_model TEXT NOT NULL,
+                                metadata_json TEXT
+                            );
+                        """)
+
                         now_iso = datetime.now(timezone.utc).isoformat()
+                        reset_type = "COLD_RESET_WITH_LEARNING_PURGE" if purge_learning_state else "LEDGER_ONLY_RESET"
+                        conn.execute(
+                            """
+                            INSERT INTO experiments (experiment_id, started_at, reset_type, learning_state_inherited, initial_capital, fee_model, slippage_model, metadata_json)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                exp_id,
+                                now_iso,
+                                reset_type,
+                                0 if purge_learning_state else 1,
+                                self.initial_balance,
+                                "TAKER_10BPS_MAKER_5BPS",
+                                "DYNAMIC_ATR_VOLATILITY_BPS",
+                                json.dumps({"purge_learning_state": purge_learning_state, "initial_balance": self.initial_balance}),
+                            )
+                        )
+
                         conn.execute(
                             """
                             INSERT INTO paper_account (id, initial_balance, balance, available_balance, reserved_balance, day_start_equity, day_start_date, updated_at)
@@ -488,7 +692,7 @@ class PaperExecutionEngine(ExecutionEngine):
                     logger.error(f"Failed to reset paper DB: {e}")
                 finally:
                     self._close_db_conn(conn)
-        logger.info(f"PaperExecutionEngine reset complete. Balance: ${self.balance:.2f}")
+        logger.info(f"PaperExecutionEngine reset complete (Experiment: {exp_id}, Purge: {purge_learning_state}). Balance: ${self.balance:.2f}")
 
     # -------------------------------------------------------------------------
     # Portfolio Accounting Properties
@@ -529,7 +733,15 @@ class PaperExecutionEngine(ExecutionEngine):
             if c_at is not None:
                 c_at = c_at if c_at.tzinfo is not None else c_at.replace(tzinfo=timezone.utc)
                 if c_at >= today_start:
-                    total += getattr(pos, "realized_pnl", 0.0)
+                    # Guard against double-counting partial exits executed on a prior UTC day
+                    partial_at = getattr(pos, "partial_realized_at", None)
+                    if partial_at is not None and partial_at.tzinfo is None:
+                        partial_at = partial_at.replace(tzinfo=timezone.utc)
+                    if getattr(pos, "partial_tp_hit", False) and partial_at is not None and partial_at < today_start:
+                        partial_pnl = getattr(pos, "partial_realized_pnl", 0.0) or 0.0
+                        total += (getattr(pos, "realized_pnl", 0.0) - partial_pnl)
+                    else:
+                        total += getattr(pos, "realized_pnl", 0.0)
             else:
                 total += getattr(pos, "realized_pnl", 0.0)
         for pos in self.open_positions.values():
@@ -546,10 +758,31 @@ class PaperExecutionEngine(ExecutionEngine):
         return round(total, 2)
 
     @property
-    def daily_pnl(self) -> float:
-        """True daily PnL (Intraday Unrealized + Realized today) (AUDIT-04)."""
+    def daily_realized_net_pnl(self) -> float:
+        return self.daily_realized_pnl
+
+    @property
+    def daily_unrealized_pnl(self) -> float:
+        return round(self.total_unrealized_pnl, 2)
+
+    @property
+    def daily_total_pnl(self) -> float:
+        """True canonical daily total PnL: daily_realized_net_pnl + current_unrealized_pnl."""
         self._check_day_rollover()
-        return round(self.total_unrealized_pnl + self.daily_realized_pnl, 2)
+        return round(self.daily_realized_pnl + self.total_unrealized_pnl, 2)
+
+    @property
+    def daily_pnl(self) -> float:
+        """Canonical daily total PnL."""
+        return self.daily_total_pnl
+
+    @property
+    def lifetime_realized_net_pnl(self) -> float:
+        return self.total_realized_pnl
+
+    @property
+    def lifetime_equity_change(self) -> float:
+        return round(self.equity - self.initial_balance, 2)
 
     @property
     def total_fees_paid(self) -> float:
@@ -588,8 +821,13 @@ class PaperExecutionEngine(ExecutionEngine):
             "equity": self.equity,
             "unrealized_pnl": round(self.total_unrealized_pnl, 2),
             "realized_pnl": round(self.total_realized_pnl, 2),
-            "daily_pnl": self.daily_pnl,
-            "daily_realized_pnl": self.daily_realized_pnl,
+            "daily_pnl": self.daily_total_pnl,
+            "daily_realized_pnl": self.daily_realized_net_pnl,
+            "daily_realized_net_pnl": self.daily_realized_net_pnl,
+            "daily_unrealized_pnl": round(self.total_unrealized_pnl, 2),
+            "daily_total_pnl": self.daily_total_pnl,
+            "lifetime_realized_net_pnl": self.lifetime_realized_net_pnl,
+            "lifetime_equity_change": self.lifetime_equity_change,
             "total_fees": round(self.total_fees_paid, 2),
             "total_slippage": round(self.total_slippage_paid, 2),
             "gross_exposure": round(self.gross_exposure, 2),
@@ -613,7 +851,10 @@ class PaperExecutionEngine(ExecutionEngine):
             max_drawdown_current=round((self.initial_balance - self.equity) / self.initial_balance, 4) if self.equity < self.initial_balance else 0.0,
             is_halted=False,
             timestamp=datetime.now(timezone.utc),
+            available_balance=round(getattr(self, "available_balance", self.balance), 2),
         )
+
+    get_portfolio_state = to_portfolio_state
 
     @property
     def portfolio(self):
@@ -783,21 +1024,60 @@ class PaperExecutionEngine(ExecutionEngine):
         if execution_style not in {"TAKER", "MAKER"}:
             raise ValueError("execution_style must be TAKER or MAKER")
 
-        # Cost model: TAKER incurs configured adverse slippage + taker fee.
-        # MAKER models a resting-limit-style fill at decision price with maker fee;
-        # it does NOT assume queue priority or guaranteed fill, so callers should
-        # only use this path for a completed-fill counterfactual/backtest.
-        base_price = decision.entry_price
-        if execution_style == "TAKER":
-            slippage_mult = (1.0 + self.slippage_rate) if side == OrderSide.BUY else (1.0 - self.slippage_rate)
-            exec_price = round(base_price * slippage_mult, 4 if base_price < 10 else 2)
-            fee_rate = self.taker_fee
-        else:
-            exec_price = round(base_price, 4 if base_price < 10 else 2)
-            fee_rate = self.maker_fee
+        # Cost model & Symbol Filter Validation:
+        from services.execution.symbol_filters import symbol_filter_engine
+        is_valid, reject_reason, _, norm_qty = symbol_filter_engine.normalize_and_validate(
+            symbol=decision.symbol,
+            price=decision.entry_price,
+            quantity=decision.calculated_size,
+            side=side.value,
+        )
+        if not is_valid:
+            logger.error(f"Execution rejected: symbol filter violation on {decision.symbol}: {reject_reason}")
+            raise ValueError(f"Order rejected by symbol filter: {reject_reason}")
 
-        slippage_cost = round(abs(exec_price - base_price) * decision.calculated_size, 4)
-        notional = exec_price * decision.calculated_size
+        base_price = decision.entry_price
+        eff_slip_rate = self.slippage_rate if execution_style == "TAKER" else 0.0
+        slip_res = symbol_filter_engine.calculate_execution_slippage(
+            base_price=base_price,
+            quantity=norm_qty,
+            side=side.value,
+            slippage_rate=eff_slip_rate,
+            symbol=decision.symbol,
+            execution_style=execution_style,
+        )
+
+        if not slip_res.is_within_tolerance:
+            reason = (
+                f"Excessive slippage rejected on {decision.symbol}: "
+                f"effective {slip_res.effective_slippage_bps:.2f} bps exceeds max allowed {slip_res.max_allowed_slippage_bps:.2f} bps "
+                f"(configured: {slip_res.configured_slippage_bps:.2f} bps, tick tolerance: {slip_res.tick_tolerance_bps:.2f} bps)"
+            )
+            logger.critical(f"EXECUTION REJECTED: {reason}")
+            try:
+                from database.repository import RiskRepository
+                from shared.enums import RiskEventType
+                RiskRepository.record_event_sync(
+                    event_type=RiskEventType.SLIPPAGE_SPIKE,
+                    severity="CRITICAL",
+                    details={
+                        "symbol": decision.symbol,
+                        "side": side.value,
+                        "base_price": base_price,
+                        "exec_price": slip_res.exec_price,
+                        "effective_slippage_bps": slip_res.effective_slippage_bps,
+                        "max_allowed_slippage_bps": slip_res.max_allowed_slippage_bps,
+                        "reason": reason,
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Could not log risk event for slippage rejection: {e}")
+            raise ValueError(reason)
+
+        exec_price = slip_res.exec_price
+        slippage_cost = round(slip_res.slippage_cost, 4)
+        fee_rate = self.taker_fee if execution_style == "TAKER" else self.maker_fee
+        notional = round(exec_price * norm_qty, 4)
         fee = round(notional * fee_rate, 4)
 
         # Available Balance Check
@@ -817,10 +1097,10 @@ class PaperExecutionEngine(ExecutionEngine):
             symbol=decision.symbol,
             order_type=OrderType.MARKET if execution_style == "TAKER" else OrderType.LIMIT,
             side=side,
-            quantity=decision.calculated_size,
+            quantity=norm_qty,
             price=base_price,
             status=OrderStatus.FILLED,
-            filled_quantity=decision.calculated_size,
+            filled_quantity=norm_qty,
             average_fill_price=exec_price,
             fee_paid=fee,
             created_at=now,
@@ -833,9 +1113,13 @@ class PaperExecutionEngine(ExecutionEngine):
             symbol=decision.symbol,
             side=side,
             price=exec_price,
-            quantity=decision.calculated_size,
+            quantity=norm_qty,
             fee=fee,
             slippage=slippage_cost,
+            configured_slippage_bps=slip_res.configured_slippage_bps,
+            effective_slippage_bps=slip_res.effective_slippage_bps,
+            tick_rounding_impact_bps=slip_res.tick_rounding_impact_bps,
+            legacy_precision_affected=False,
             timestamp=now,
         )
 
@@ -847,7 +1131,7 @@ class PaperExecutionEngine(ExecutionEngine):
             side=pos_side,
             entry_price=exec_price,
             current_price=exec_price,
-            quantity=decision.calculated_size,
+            quantity=norm_qty,
             stop_loss=decision.stop_loss,
             take_profit=decision.take_profit,
             unrealized_pnl=0.0,
@@ -857,7 +1141,7 @@ class PaperExecutionEngine(ExecutionEngine):
             opened_at=now,
             peak_price=exec_price,
             fees_paid=fee,
-            initial_quantity=decision.calculated_size,
+            initial_quantity=norm_qty,
             initial_stop_loss=initial_stop,
             risk_dist=risk_dist,
             partial_tp_hit=False,
@@ -884,16 +1168,39 @@ class PaperExecutionEngine(ExecutionEngine):
         return order, fill, position
 
     def update_market_price(self, symbol: str, current_price: float):
-        """Updates open position current price and recalculates unrealized PnL."""
+        """Updates open position current price, resets failures/stale, and recalculates unrealized PnL."""
         if symbol not in self.open_positions:
             return
         pos = self.open_positions[symbol]
         pos.current_price = current_price
+        pos.last_price_update_at = datetime.now(timezone.utc)
+        pos.price_fetch_failures = 0
+        pos.price_stale = False
 
         if pos.side == PositionSide.LONG:
             pos.unrealized_pnl = (current_price - pos.entry_price) * pos.quantity
         else:
             pos.unrealized_pnl = (pos.entry_price - current_price) * pos.quantity
+
+        if getattr(self, "db_path", None):
+            self._persist_position(pos)
+
+    def record_price_fetch_failure(self, symbol: str, error_msg: str = "") -> int:
+        """
+        Increments failure counter in RAM and SQLite immediately.
+        Marks price_stale = True if failures >= 5.
+        Returns the updated failure count.
+        """
+        if symbol not in self.open_positions:
+            return 0
+        pos = self.open_positions[symbol]
+        failures = getattr(pos, "price_fetch_failures", 0) + 1
+        pos.price_fetch_failures = failures
+        if failures >= 5:
+            pos.price_stale = True
+        if getattr(self, "db_path", None):
+            self._persist_position(pos)
+        return failures
 
     def check_position_stops_and_targets(
         self,
@@ -983,10 +1290,13 @@ class PaperExecutionEngine(ExecutionEngine):
 
                 peak_gain = pos.peak_price - pos.entry_price
 
-                # Break-even check (+1.0R)
-                if high >= pos.entry_price + initial_risk and pos.stop_loss < pos.entry_price:
-                    pos.stop_loss = pos.entry_price
-                    logger.info(f"Stop-Loss adjusted to BREAK-EVEN for {symbol} LONG @ {pos.entry_price:.2f}")
+                # Fee-Inclusive Break-even check (+1.0R): cover entry price + round-trip fee & slippage
+                round_trip_cost_rate = (self.taker_fee * 2) + self.slippage_rate
+                fee_buffer = pos.entry_price * round_trip_cost_rate
+                target_be = round(pos.entry_price + fee_buffer, 4)
+                if high >= pos.entry_price + initial_risk and pos.stop_loss < target_be:
+                    pos.stop_loss = target_be
+                    logger.info(f"Stop-Loss adjusted to FEE-INCLUSIVE BREAK-EVEN for {symbol} LONG @ ${pos.stop_loss:.4f}")
 
                 # Peak Profit Lock: If gained >= 1.5R, protect 50% of peak profit from pullback
                 if peak_gain >= (initial_risk * 1.5) and peak_gain > 0:
@@ -1009,10 +1319,13 @@ class PaperExecutionEngine(ExecutionEngine):
 
                 peak_gain = pos.entry_price - pos.peak_price
 
-                # Break-even check (+1.0R)
-                if low <= pos.entry_price - initial_risk and pos.stop_loss > pos.entry_price:
-                    pos.stop_loss = pos.entry_price
-                    logger.info(f"Stop-Loss adjusted to BREAK-EVEN for {symbol} SHORT @ {pos.entry_price:.2f}")
+                # Fee-Inclusive Break-even check (+1.0R): cover entry price + round-trip fee & slippage
+                round_trip_cost_rate = (self.taker_fee * 2) + self.slippage_rate
+                fee_buffer = pos.entry_price * round_trip_cost_rate
+                target_be = round(pos.entry_price - fee_buffer, 4)
+                if low <= pos.entry_price - initial_risk and pos.stop_loss > target_be:
+                    pos.stop_loss = target_be
+                    logger.info(f"Stop-Loss adjusted to FEE-INCLUSIVE BREAK-EVEN for {symbol} SHORT @ ${pos.stop_loss:.4f}")
 
                 # Peak Profit Lock: If gained >= 1.5R, protect 50% of peak profit from pullback
                 if peak_gain >= (initial_risk * 1.5) and peak_gain > 0:
@@ -1054,7 +1367,8 @@ class PaperExecutionEngine(ExecutionEngine):
         if pos.status != PositionStatus.OPEN or pos.quantity <= 0:
             return None
 
-        close_qty = round(pos.quantity * fraction, 6)
+        from services.execution.symbol_filters import symbol_filter_engine
+        close_qty = symbol_filter_engine.round_to_step_size(pos.quantity * fraction, symbol)
         if close_qty <= 0:
             return None
         if close_qty >= pos.quantity:
@@ -1063,15 +1377,26 @@ class PaperExecutionEngine(ExecutionEngine):
         raw_exit = exit_price if exit_price is not None else pos.current_price
         now = datetime.now(timezone.utc)
 
-        # Apply slippage on exit
-        if pos.side == PositionSide.LONG:
-            exec_exit = round(raw_exit * (1.0 - self.slippage_rate), 4 if raw_exit < 10 else 2)
-            gross_pnl = (exec_exit - pos.entry_price) * close_qty
-        else:
-            exec_exit = round(raw_exit * (1.0 + self.slippage_rate), 4 if raw_exit < 10 else 2)
-            gross_pnl = (pos.entry_price - exec_exit) * close_qty
+        # Closing side: If position is LONG, closing order is SELL. If SHORT, closing order is BUY.
+        close_side = OrderSide.SELL if pos.side == PositionSide.LONG else OrderSide.BUY
 
-        slippage_cost = round(abs(exec_exit - raw_exit) * close_qty, 4)
+        # Apply directional slippage and tick normalization on exit
+        slip_res = symbol_filter_engine.calculate_execution_slippage(
+            base_price=raw_exit,
+            quantity=close_qty,
+            side=close_side.value,
+            slippage_rate=self.slippage_rate,
+            symbol=symbol,
+            execution_style="TAKER",
+        )
+        exec_exit = slip_res.exec_price
+        slippage_cost = round(slip_res.slippage_cost, 4)
+
+        if pos.side == PositionSide.LONG:
+            gross_pnl = round((exec_exit - pos.entry_price) * close_qty, 4)
+        else:
+            gross_pnl = round((pos.entry_price - exec_exit) * close_qty, 4)
+
         close_notional = exec_exit * close_qty
         exit_fee = round(close_notional * self.taker_fee, 4)
 
@@ -1087,22 +1412,24 @@ class PaperExecutionEngine(ExecutionEngine):
         self.available_balance = max(0.0, self.available_balance + cash_proceeds)
         self.balance = round(self.available_balance + self.reserved_balance, 4)
 
-        # Update remaining position state
-        pos.quantity = round(pos.quantity - close_qty, 6)
+        # Update remaining position state without dropping dust
+        pos.quantity = round(pos.quantity - close_qty, 8)
         # Retain remaining entry fee in pos.fees_paid
         pos.fees_paid = round(max(0.0, float(pos.fees_paid or 0.0) - entry_fee_share), 4)
         pos.partial_tp_hit = True
         pos.partial_realized_pnl = round(float(pos.partial_realized_pnl or 0.0) + leg_net_pnl, 4)
         pos.partial_fees_paid = round(float(pos.partial_fees_paid or 0.0) + leg_fees, 4)
         pos.partial_realized_at = now
-        # Move stop loss to Break-Even (entry price), never loosening an already-trailed stop
+        # Move stop loss to Fee-Inclusive Break-Even, never loosening an already-trailed stop
+        round_trip_cost_rate = (self.taker_fee * 2) + self.slippage_rate
+        fee_buffer = pos.entry_price * round_trip_cost_rate
         if pos.side == PositionSide.LONG:
-            pos.stop_loss = max(pos.stop_loss, pos.entry_price)
+            target_be = round(pos.entry_price + fee_buffer, 4)
+            pos.stop_loss = max(pos.stop_loss, target_be)
         else:
-            pos.stop_loss = min(pos.stop_loss, pos.entry_price)
+            target_be = round(pos.entry_price - fee_buffer, 4)
+            pos.stop_loss = min(pos.stop_loss, target_be)
 
-        # Record closing fill for this partial exit
-        close_side = OrderSide.SELL if pos.side == PositionSide.LONG else OrderSide.BUY
         fill_id = f"fill_{uuid.uuid4().hex[:12]}"
         close_fill = Fill(
             fill_id=fill_id,
@@ -1113,6 +1440,10 @@ class PaperExecutionEngine(ExecutionEngine):
             quantity=close_qty,
             fee=exit_fee,
             slippage=slippage_cost,
+            configured_slippage_bps=slip_res.configured_slippage_bps,
+            effective_slippage_bps=slip_res.effective_slippage_bps,
+            tick_rounding_impact_bps=slip_res.tick_rounding_impact_bps,
+            legacy_precision_affected=False,
             timestamp=now,
         )
         self.fills.append(close_fill)
@@ -1147,15 +1478,25 @@ class PaperExecutionEngine(ExecutionEngine):
         pos = self.open_positions.pop(symbol)
         now = exit_time or datetime.now(timezone.utc)
 
-        # Apply slippage on exit (P1 item)
-        if pos.side == PositionSide.LONG:
-            exec_exit = round(exit_price * (1.0 - self.slippage_rate), 4 if exit_price < 10 else 2)
-            gross_pnl = (exec_exit - pos.entry_price) * pos.quantity
-        else:
-            exec_exit = round(exit_price * (1.0 + self.slippage_rate), 4 if exit_price < 10 else 2)
-            gross_pnl = (pos.entry_price - exec_exit) * pos.quantity
+        from services.execution.symbol_filters import symbol_filter_engine
+        close_side = OrderSide.SELL if pos.side == PositionSide.LONG else OrderSide.BUY
 
-        slippage_cost = round(abs(exec_exit - exit_price) * pos.quantity, 4)
+        # Apply directional slippage and tick normalization on exit
+        slip_res = symbol_filter_engine.calculate_execution_slippage(
+            base_price=exit_price,
+            quantity=pos.quantity,
+            side=close_side.value,
+            slippage_rate=self.slippage_rate,
+            symbol=symbol,
+            execution_style="TAKER",
+        )
+        exec_exit = slip_res.exec_price
+        slippage_cost = round(slip_res.slippage_cost, 4)
+
+        if pos.side == PositionSide.LONG:
+            gross_pnl = round((exec_exit - pos.entry_price) * pos.quantity, 4)
+        else:
+            gross_pnl = round((pos.entry_price - exec_exit) * pos.quantity, 4)
 
         # Calculate closing fee and true net PnL (accounting for both entry and exit fees)
         close_notional = exec_exit * pos.quantity
@@ -1177,7 +1518,6 @@ class PaperExecutionEngine(ExecutionEngine):
         self.balance = round(self.available_balance + self.reserved_balance, 4)
 
         # Record closing fill
-        close_side = OrderSide.SELL if pos.side == PositionSide.LONG else OrderSide.BUY
         fill_id = f"fill_{uuid.uuid4().hex[:12]}"
         close_fill = Fill(
             fill_id=fill_id,
@@ -1188,6 +1528,10 @@ class PaperExecutionEngine(ExecutionEngine):
             quantity=pos.quantity,
             fee=exit_fee,
             slippage=slippage_cost,
+            configured_slippage_bps=slip_res.configured_slippage_bps,
+            effective_slippage_bps=slip_res.effective_slippage_bps,
+            tick_rounding_impact_bps=slip_res.tick_rounding_impact_bps,
+            legacy_precision_affected=False,
             timestamp=now,
         )
         self.fills.append(close_fill)
@@ -1202,6 +1546,19 @@ class PaperExecutionEngine(ExecutionEngine):
         if pos.initial_quantity is not None:
             pos.quantity = pos.initial_quantity
 
+        # Authoritative R-multiple calculation from initial risk (AUDIT-R-MULTIPLE)
+        risk_dist = getattr(pos, "risk_dist", None)
+        if not risk_dist or risk_dist <= 0:
+            init_sl = getattr(pos, "initial_stop_loss", None) or pos.stop_loss
+            risk_dist = abs(pos.entry_price - init_sl) if init_sl else 0.0
+
+        init_qty = getattr(pos, "initial_quantity", None) or pos.quantity
+        risk_amount = (risk_dist * init_qty) if (risk_dist > 0 and init_qty > 0) else 1.0
+        if risk_amount > 0:
+            pos.r_multiple = round(final_realized_pnl / risk_amount, 4)
+        else:
+            pos.r_multiple = 0.0
+
         self.closed_positions_history.append(pos)
 
         # Persist position close and balance update to SQLite
@@ -1214,4 +1571,25 @@ class PaperExecutionEngine(ExecutionEngine):
             f"Net PnL: ${final_realized_pnl:+.2f} (Remaining Leg: ${remaining_net_pnl:+.2f}), New Balance: ${self.balance:.2f}",
             extra={"symbol": symbol, "strategy": pos.strategy},
         )
+
+        # Autonomous Post-Trade Reflection & Adaptive Learning Hook
+        try:
+            from services.strategy_engine.adaptive_learning import adaptive_learning_engine
+            adaptive_learning_engine.record_closed_trade(pos, exit_reason=reason, db_path=self.db_path)
+        except Exception as e:
+            logger.error(f"Failed to trigger adaptive learning for {symbol}: {e}")
+
+        # Learning Decision Logger Finalization Hook
+        try:
+            from services.learning.decision_logger import decision_logger
+            decision_logger.finalize_trade_outcome(
+                position_id=pos.position_id,
+                realized_pnl=final_realized_pnl,
+                r_multiple=pos.r_multiple,
+                exit_reason=reason,
+            )
+        except Exception as e:
+            logger.error(f"Failed to finalize decision logger outcome for {symbol}: {e}")
+
         return pos
+

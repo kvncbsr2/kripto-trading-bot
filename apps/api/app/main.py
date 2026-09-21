@@ -23,25 +23,39 @@ async def lifespan(app: FastAPI):
     # 1. State transition: STARTING
     RUNTIME_STATE["system_state"] = "STARTING"
     logger.info("Initializing database schemas [STARTING]...")
+    db_ok = False
     try:
-        import asyncio
         await asyncio.wait_for(init_models_async(), timeout=3.0)
+        db_ok = True
     except Exception as e:
-        logger.warning(f"Database initialization warning (offline fallback active): {e}")
+        logger.error(f"Database initialization failed: {e}")
+        RUNTIME_STATE["system_state"] = "DEGRADED"
 
     # 2. State transition: CONNECTING
-    RUNTIME_STATE["system_state"] = "CONNECTING"
+    if db_ok:
+        RUNTIME_STATE["system_state"] = "CONNECTING"
     logger.info("Connecting MarketDataService to Binance feed [CONNECTING]...")
+    feed_ok = False
     try:
         market_data_service.start()
-        import asyncio
-        asyncio.create_task(market_data_service.warm_up_cache())
+        if getattr(market_data_service, "_is_started", False):
+            asyncio.create_task(market_data_service.warm_up_cache())
+            feed_ok = True
+        else:
+            logger.error("MarketDataService failed to start connector.")
+            RUNTIME_STATE["system_state"] = "HALTED"
     except Exception as e:
-        logger.warning(f"MarketDataService background connector warning: {e}")
+        logger.error(f"MarketDataService connector failed: {e}")
+        RUNTIME_STATE["system_state"] = "HALTED"
 
-    # 3. State transition: READY
-    RUNTIME_STATE["system_state"] = "READY"
-    logger.info("System state transitioned to [READY].")
+    # 3. State transition: READY only if both components succeed
+    if db_ok and feed_ok:
+        RUNTIME_STATE["system_state"] = "READY"
+        logger.info("System state transitioned to [READY].")
+    else:
+        logger.warning(
+            f"Startup checks failed! System state is [{RUNTIME_STATE['system_state']}]. Autonomous trading blocked."
+        )
 
     # Wire Autonomous Trader
     autonomous_trader.bind_command_bus(command_bus)
@@ -51,12 +65,12 @@ async def lifespan(app: FastAPI):
     # Synchronize and restore persisted Risk Profile and Strategy (Architecture V2)
     try:
         from services.config_manager.risk_profiles import restore_runtime_system_state
-        restore_runtime_system_state()
+        await asyncio.to_thread(restore_runtime_system_state)
     except Exception as e:
         logger.warning(f"Failed to restore persisted profile state: {e}")
 
-    # Auto-start Autonomous Trader loop (7/24 Continuous Cloud Execution)
-    if getattr(settings, "AUTONOMOUS_AUTO_START", True):
+    # Auto-start Autonomous Trader loop (ONLY IF READY)
+    if RUNTIME_STATE["system_state"] == "READY" and getattr(settings, "AUTONOMOUS_AUTO_START", True):
         try:
             autonomous_trader.start()
             logger.info("Autonomous Paper Trader loop auto-started on boot.")
@@ -64,7 +78,7 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Autonomous Paper Trader auto-start warning: {e}")
     else:
         autonomous_trader.is_active = False
-        logger.info("Autonomous Paper Trader loop initialized (OFF by default).")
+        logger.info(f"Autonomous Paper Trader loop initialized (OFF, system state: {RUNTIME_STATE['system_state']}).")
 
     # Start Telegram background listener if enabled
     telegram_task = None
@@ -141,15 +155,6 @@ if os.path.isdir(static_dir):
 async def serve_dashboard(request: Request, response: Response):
     dashboard_path = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
     if os.path.exists(dashboard_path):
-        is_secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https"
-        response.set_cookie(
-            key="kripto_admin_token",
-            value=settings.API_ADMIN_KEY,
-            httponly=True,
-            secure=is_secure,
-            samesite="lax",
-            path="/",
-        )
         with open(dashboard_path, "r", encoding="utf-8") as f:
             return f.read()
     return "<h1>KRIPTO AGENT Dashboard</h1><p>Static dashboard not found. Use Next.js app on port 3000.</p>"

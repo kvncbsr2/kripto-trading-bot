@@ -56,3 +56,70 @@ def calculate_atr_position_size(
     actual_risk = final_size * unit_risk
 
     return round(final_size, 6), round(actual_risk, 2)
+
+
+def calculate_kelly_fraction(
+    win_rate: float,
+    win_loss_ratio: float,
+    multiplier: float = 0.5,
+    max_cap: float = 0.05,
+) -> float:
+    """
+    Calculates Kelly Criterion optimal risk fraction:
+      f* = (p * b - (1 - p)) / b
+    Where:
+      p = win_rate (0.0 to 1.0)
+      b = win_loss_ratio (avg_win / avg_loss)
+      multiplier = fraction of Kelly to use (0.5 for Half-Kelly, 0.25 for Quarter-Kelly)
+      max_cap = ceiling on single trade risk (e.g., 0.05 = 5% max)
+    Returns:
+      Safe risk fraction (e.g., 0.025 = 2.5%)
+    """
+    if win_loss_ratio <= 0 or win_rate <= 0:
+        return 0.0
+    p = win_rate
+    q = 1.0 - p
+    b = win_loss_ratio
+    full_kelly = (p * b - q) / b
+    if full_kelly <= 0:
+        return 0.0
+    fractional_kelly = full_kelly * multiplier
+    return round(min(fractional_kelly, max_cap), 4)
+
+
+def calculate_risk_of_ruin(
+    win_rate: float,
+    win_loss_ratio: float,
+    risk_per_trade: float = 0.02,
+    ruin_drawdown_pct: float = 0.50,
+) -> float:
+    """
+    Perry Kaufman's Risk of Ruin (RoR) formula for systematic quantitative trading:
+      RoR = ((1 - A) / (1 + A))^U
+    where:
+      A = (p * b - (1 - p)) / (p * b + (1 - p))  [Payoff-adjusted edge]
+      U = ruin_drawdown_pct / risk_per_trade       [Number of risk units to ruin]
+    Returns probability of ruin between 0.0 and 1.0 (0.01 = 1%).
+    """
+    if win_rate <= 0 or win_loss_ratio <= 0 or risk_per_trade <= 0:
+        return 1.0
+    p = win_rate
+    q = 1.0 - p
+    b = win_loss_ratio
+
+    edge = (p * b) - q
+    if edge <= 0:
+        return 1.0  # Guaranteed ruin over infinite horizon if negative edge
+
+    denom = (p * b) + q
+    if denom <= 0:
+        return 1.0
+    a = edge / denom
+    if a >= 1.0:
+        return 0.0
+
+    units = ruin_drawdown_pct / risk_per_trade
+    ratio = (1.0 - a) / (1.0 + a)
+    ror = math.pow(ratio, units)
+    return round(min(1.0, max(0.0, ror)), 6)
+

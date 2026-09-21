@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 from services.signal_engine.scorer import SignalScorer
 from services.strategy_engine.strategies.base_strategy import BaseStrategy
@@ -102,3 +102,15 @@ class RSIDivergenceStrategy(BaseStrategy):
                 )
 
         return None
+
+    def evaluate_from_dataframe(
+        self,
+        df: Any,
+        symbol: str,
+    ) -> Optional[Signal]:
+        """
+        Direct DataFrame evaluation adapter for RSIDivergenceStrategy.
+        Converts DataFrame candles into FeatureVector & MarketRegimeState and calls evaluate().
+        """
+        return super().evaluate_from_dataframe(df, symbol=symbol)
+

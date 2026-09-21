@@ -1,3 +1,4 @@
+import inspect
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -205,6 +206,8 @@ async def post_simulate_trade(
     broker = command_bus.broker
     if not is_buy and symbol in broker.open_positions:
         pos = broker.close_position(symbol, exit_price=live_price, reason="USER_MANUAL_SELL")
+        if inspect.isawaitable(pos):
+            pos = await pos
         pnl = pos.realized_pnl if pos else 0.0
         return {
             "success": True,

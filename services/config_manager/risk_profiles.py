@@ -5,7 +5,7 @@ Provides single source of truth, atomic switching, restart persistence, and safe
 """
 
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from services.config_manager.state_persistence import (
     load_persisted_profile_state,
@@ -16,9 +16,11 @@ from services.strategy_engine.registry import (
     create_strategy,
     get_strategy_metadata,
 )
+from shared.config import get_settings
 from shared.logging import add_system_log, get_logger
 
 logger = get_logger("risk-profiles", service="config_manager")
+settings = get_settings()
 
 
 @dataclass(frozen=True)
@@ -226,7 +228,7 @@ RISK_PROFILES: Dict[int, RiskProfile] = {
         target_mode="SOFT",
         preferred_risk_reward=1.5,
         timeframe="15m",
-        color="rose",
+        color="emerald",
     ),
 }
 
@@ -246,37 +248,59 @@ def get_profile(level: int) -> RiskProfile:
 
 def _get_system_instances():
     try:
-        from apps.api.app.api.state import RUNTIME_STATE
+        from apps.api.app.api.state import RUNTIME_STATE, risk_engine
         from services.autonomous_runner import autonomous_trader
     except ImportError:
         RUNTIME_STATE = {}
         autonomous_trader = None
-    return RUNTIME_STATE, autonomous_trader
+        risk_engine = None
+    return RUNTIME_STATE, autonomous_trader, risk_engine
 
 
-def apply_profile_to_system(level: int, source: str = "api") -> Dict[str, Any]:
+def apply_profile_to_system(
+    level: int,
+    source: str = "api",
+    max_open_positions_override: Optional[int] = None,
+) -> Dict[str, Any]:
     """
     Atomically applies the chosen Risk Profile (1-10) to the running system.
     Persists selection across restarts.
     Guarantees that existing open positions are never forcibly closed on limit downgrade.
     """
     profile = get_profile(level)
-    RUNTIME_STATE, autonomous_trader = _get_system_instances()
+    RUNTIME_STATE, autonomous_trader, risk_engine = _get_system_instances()
 
     current_strategy_id = RUNTIME_STATE.get("active_strategy_id", DEFAULT_STRATEGY_ID)
 
-    # 1. Update Autonomous Trader's Risk Engine
+    # 1. Update Live Risk Engine Instances (both state singleton and autonomous trader)
+    re_list = []
+    if risk_engine:
+        re_list.append(risk_engine)
     if autonomous_trader and hasattr(autonomous_trader, "risk_engine") and autonomous_trader.risk_engine:
-        re = autonomous_trader.risk_engine
+        if autonomous_trader.risk_engine not in re_list:
+            re_list.append(autonomous_trader.risk_engine)
+
+    custom_max_pos = max_open_positions_override
+    if custom_max_pos is not None:
+        custom_max_pos = min(int(custom_max_pos), 8)
+
+    # Invariant: hard ceiling of 8 across any profile or override
+    capped_profile_max_pos = min(profile.max_open_positions, 8)
+    eff_max_pos = custom_max_pos if custom_max_pos is not None else capped_profile_max_pos
+
+    for re in re_list:
         re.risk_per_trade = profile.risk_per_trade
         re.daily_target_max = profile.daily_target
         re.daily_target_min = round(profile.daily_target * 0.7, 2)
         re.daily_max_loss_usd = profile.daily_max_loss
-        re.max_open_positions = profile.max_open_positions
+        re.max_open_positions = capped_profile_max_pos
+        re.max_open_positions_override = custom_max_pos
         re.target_mode = profile.target_mode
         re.min_risk_reward = profile.preferred_risk_reward
+        re.max_trades_per_day = getattr(settings, "MAX_TRADES_PER_DAY", 10)
         if hasattr(re, "circuit_breaker") and re.circuit_breaker:
             re.circuit_breaker.daily_max_loss_usd = profile.daily_max_loss
+            re.circuit_breaker.max_trades_per_day = getattr(settings, "MAX_TRADES_PER_DAY", 10)
 
     # 2. Update Strategy Risk Parameters (without changing the strategy class)
     if autonomous_trader and hasattr(autonomous_trader, "strategy") and autonomous_trader.strategy:
@@ -295,11 +319,18 @@ def apply_profile_to_system(level: int, source: str = "api") -> Dict[str, Any]:
     # 3. Update Authoritative Runtime State
     RUNTIME_STATE["active_risk_profile"] = profile.to_dict()
     RUNTIME_STATE["active_profile_level"] = profile.level
+    RUNTIME_STATE["active_risk_profile_level"] = profile.level
+    if source in ("api", "user", "manual", "user_runtime_instruction"):
+        RUNTIME_STATE["manual_profile_override"] = True
+    elif source in ("startup_enforced_l1", "startup", "system_default"):
+        RUNTIME_STATE["manual_profile_override"] = False
     RUNTIME_STATE["daily_target"] = profile.daily_target
     RUNTIME_STATE["daily_target_max"] = profile.daily_target
     RUNTIME_STATE["daily_target_min"] = round(profile.daily_target * 0.7, 2)
     RUNTIME_STATE["daily_max_loss"] = profile.daily_max_loss
-    RUNTIME_STATE["max_open_positions"] = profile.max_open_positions
+    RUNTIME_STATE["max_open_positions"] = capped_profile_max_pos
+    RUNTIME_STATE["max_open_positions_override"] = custom_max_pos
+    RUNTIME_STATE["max_trades_per_day"] = getattr(settings, "MAX_TRADES_PER_DAY", 10)
     RUNTIME_STATE["min_opportunity_score"] = profile.min_opportunity_score
     RUNTIME_STATE["min_signal_score"] = profile.min_signal_score
     RUNTIME_STATE["target_mode"] = profile.target_mode
@@ -337,7 +368,7 @@ def apply_strategy_to_system(strategy_id: str, source: str = "api") -> Dict[str,
     Never forcibly closes existing open positions.
     """
     meta = get_strategy_metadata(strategy_id)
-    RUNTIME_STATE, autonomous_trader = _get_system_instances()
+    RUNTIME_STATE, autonomous_trader, _ = _get_system_instances()
 
     active_level = RUNTIME_STATE.get("active_profile_level", 1)
     profile = get_profile(active_level)
@@ -388,6 +419,7 @@ def restore_runtime_system_state() -> Dict[str, Any]:
     Ensures UI, API, Runtime, RiskEngine, and Trader start with 100% identical state.
     """
     persisted = load_persisted_profile_state()
+    # P0 INVARIANT: Always fallback strictly to Level 1 (Conservative) if state file is missing/corrupted
     level = persisted.get("active_risk_profile_level", 1)
     strategy_id = persisted.get("active_strategy_id", DEFAULT_STRATEGY_ID)
 

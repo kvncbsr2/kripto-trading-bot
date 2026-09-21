@@ -39,7 +39,8 @@ def test_expectancy_negative_circuit_breaker_trigger():
         {'position_id': 'P5', 'symbol': 'XRP/USDT', 'realized_pnl': -20.0},
     ]
 
-    metrics = ExpectancyEngine.calculate_from_positions(losing_trades)
+    # Mode 1: Enforced Circuit Breaker
+    metrics = ExpectancyEngine.calculate_from_positions(losing_trades, enforce_circuit_breaker=True)
 
     assert metrics['sample_size'] == 5
     assert metrics['win_rate_pct'] == 20.0
@@ -49,11 +50,22 @@ def test_expectancy_negative_circuit_breaker_trigger():
     assert metrics['status'] == 'NEGATIVE_EXPECTANCY_HALTED'
     assert metrics['status_badge'] == 'DURDURMA AKTİF'
 
+    # Mode 2: Unrestricted Mode (Devre kesici kaldırıldı)
+    metrics_free = ExpectancyEngine.calculate_from_positions(losing_trades, enforce_circuit_breaker=False)
+    assert metrics_free['should_halt'] is False
+    assert metrics_free['status'] == 'UNRESTRICTED_TRADING'
+    assert metrics_free['status_badge'] == 'DEVRE KESİCİ KALDIRILDI'
+
     cb = CircuitBreaker()
-    tripped, reason, event_type = cb.check_expectancy(losing_trades)
+    tripped, reason, event_type = cb.check_expectancy(losing_trades, enforce_circuit_breaker=True)
     assert tripped is True
     assert cb.state == CircuitState.LOCKED
     assert 'EXPECTANCY_HALT' in reason
+
+    # When suspended, CircuitBreaker does not trip
+    cb.suspend()
+    tripped_suspended, _, _ = cb.check_expectancy(losing_trades, enforce_circuit_breaker=True)
+    assert tripped_suspended is False
 
 
 def test_expectancy_empty_positions():

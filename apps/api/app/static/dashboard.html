@@ -6,16 +6,17 @@
     <title>KRIPTO AGENT — Kripto Al-Sat Kontrol Merkezi</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/static/lightweight-charts.js"></script>
+    <script>if (typeof LightweightCharts === "undefined") { document.write('<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"><\/script>'); }</script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        darkBg: '#090d16',
-                        panelBg: '#111827',
-                        cardBg: '#161f30',
-                        cardBorder: '#1f2d44',
+                        darkBg: '#18181b',
+                        panelBg: '#202024',
+                        cardBg: '#242429',
+                        cardBorder: '#32323a',
                         accentGreen: '#10b981',
                         accentRed: '#ef4444',
                         accentBlue: '#3b82f6',
@@ -25,9 +26,13 @@
         }
     </script>
     <style>
-        body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #090d16; color: #f1f5f9; }
-        .card { background: #111827; border: 1px solid #1f2d44; border-radius: 16px; }
-        .inner-card { background: #0c121e; border: 1px solid #1a2538; border-radius: 12px; }
+        body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #18181b !important; color: #f4f4f5 !important; }
+        .card { background-color: #202024 !important; border: 1px solid #32323a !important; border-radius: 16px; }
+        .inner-card { background-color: #1a1a1e !important; border: 1px solid #2d2d35 !important; border-radius: 12px; }
+        .bg-slate-900, [class*="bg-slate-900"] { background-color: #202024 !important; }
+        .bg-slate-950, [class*="bg-slate-950"] { background-color: #18181b !important; }
+        .bg-slate-800, [class*="bg-slate-800"] { background-color: #27272c !important; }
+        .border-slate-800, .border-slate-700, .border-slate-600 { border-color: #383842 !important; }
         .tab-btn.active { border-color: #3b82f6; color: #60a5fa; background: rgba(59, 130, 246, 0.08); }
         .tab-btn#tab-btn-whales.active { border-color: #06b6d4; color: #22d3ee; background: rgba(6, 182, 212, 0.15); }
         .tab-btn#tab-btn-report.active { border-color: #f59e0b; color: #fbbf24; background: rgba(245, 158, 11, 0.15); }
@@ -85,38 +90,22 @@
 
             <!-- Sağ: Bot Yönetim Butonları ve Risk Merdiveni -->
             <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
-                <!-- Risk Profili Seçici -->
-                <div class="flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/80 px-2.5 py-1.5 rounded-xl text-xs shadow-inner">
-                    <span class="text-amber-400 font-bold flex items-center gap-1">
-                        <span>⚡</span>
-                        <span class="hidden xl:inline text-slate-300 font-semibold">Risk:</span>
-                    </span>
-                    <select id="select-risk-profile" onchange="changeRiskProfile(this.value)" class="bg-slate-800 text-white font-bold px-2 py-1 rounded-lg border border-slate-600 focus:outline-none focus:border-amber-400 text-xs cursor-pointer">
-                        <option value="1">L1: Ultra Korumacı (Stabil)</option>
-                        <option value="2">L2: Korumacı</option>
-                        <option value="3">L3: Dengeli</option>
-                        <option value="4">L4: Büyüme</option>
-                        <option value="5">L5: Aktif</option>
-                        <option value="6">L6: Atak / Agresif</option>
-                        <option value="7">L7: Yüksek Risk</option>
-                        <option value="8">L8: Yüksek Aktivite</option>
-                        <option value="9">L9: Çok Agresif</option>
-                        <option value="10">L10: Maksimum Risk</option>
-                    </select>
-                    <button onclick="rollbackToLevel1()" title="Tek Tıkla En Güvenli / Stabil Seviyeye (L1) Dön" class="px-2 py-1 rounded-lg text-[11px] font-bold text-emerald-400 hover:text-white bg-emerald-950/80 hover:bg-emerald-800 border border-emerald-700/80 transition flex items-center gap-1">
-                        <span>🛡️</span>
-                        <span>L1'e Dön</span>
-                    </button>
+                <!-- Tam Otomatik Mod Rozeti -->
+                <div class="flex items-center gap-2 bg-emerald-950/80 border border-emerald-700/80 text-emerald-300 px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-inner" title="Sistem tam otomatik modda tüm paritelerdeki fırsatları eşzamanlı değerlendirir">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="tracking-wide">⚡ TAM OTOMATİK MOD: TÜM FIRSATLAR AKTİF</span>
                 </div>
 
-                <!-- Strateji Seçici (Akıllı İşlem Modu) -->
-                <div class="flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/80 px-2.5 py-1.5 rounded-xl text-xs shadow-inner" title="Bot işlem modu: Piyasayı otomatik tarayıp en karlı dip fırsatlarını yakalar">
+                <!-- Strateji Seçici (İşlem Modu) -->
+                <div class="flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/80 px-2.5 py-1.5 rounded-xl text-xs shadow-inner" title="Bot işlem modu: Piyasayı otomatik tarayıp seçilen modelle fırsatları yakalar">
                     <span class="text-blue-400 font-bold flex items-center gap-1">
                         <span>🤖</span>
-                        <span class="hidden xl:inline text-slate-300 font-semibold">İşlem Modu:</span>
+                        <span class="hidden xl:inline text-slate-300 font-semibold">Strateji:</span>
                     </span>
                     <select id="select-strategy" onchange="changeStrategy(this.value)" class="bg-slate-800 text-white font-bold px-2 py-1 rounded-lg border border-slate-600 focus:outline-none focus:border-blue-400 text-xs cursor-pointer">
-                        <option value="r10_rsi_divergence" selected>🤖 Akıllı Otomatik (Dip Avcısı - Önerilen)</option>
+                        <option value="turbo_fast_strike">⚡ Turbo Hızlı Vur-Kaç (Scalp Modu)</option>
+                        <option value="momentum_dip_rebound">📈 Dinamik Momentum & Dip Dönüşü (Araştırma Modu)</option>
+                        <option value="r10_rsi_divergence">🤖 R10 RSI Uyumsuzluğu (Dip Avcısı)</option>
                         <option value="regime_gated_pullback">📈 Yükseliş Trendi (Pullback Alımı)</option>
                         <option value="mean_reversion">⚡ Hızlı Tepki Alımı (Aşırı Satış)</option>
                         <option value="trend_following">🚀 Momentum & Kırılım Takipçisi</option>
@@ -133,7 +122,7 @@
                 <button onclick="emergencyStop()" title="Tüm İşlemleri Anında Dondur" class="px-3.5 py-3 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 bg-red-950/70 hover:bg-red-900/70 border border-red-800/80 transition">
                     🛑 Acil Stop
                 </button>
-                <button onclick="resetPaperAccount()" title="Paper Hesabını ve İşlemleri Sıfırla ($5,000)" class="px-3.5 py-3 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition flex items-center gap-1.5">
+                <button onclick="resetPaperAccount()" title="Paper Hesabını ve İşlemleri Sıfırla ($10,000)" class="px-3.5 py-3 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition flex items-center gap-1.5">
                     <span>🔄</span>
                     <span class="hidden sm:inline">Sıfırla</span>
                 </button>
@@ -148,22 +137,29 @@
         <!-- ================================================================= -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <!-- 1. Toplam Bakiye (Equity) -->
+            <!-- 1. Toplam Portföy Büyüklüğü -->
             <div class="card p-4">
-                <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Toplam Portföy (Equity)</div>
-                <div id="val-balance" class="text-2xl font-black text-white font-mono mt-1">$5,000.00</div>
+                <div class="flex justify-between items-center">
+                    <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Toplam Portföy (Equity)</div>
+                    <span class="text-[10px] text-slate-500 font-mono">Başlangıç: $10,000.00</span>
+                </div>
+                <div id="val-balance" class="text-2xl font-black text-white font-mono mt-1">$10,000.00</div>
                 <div class="text-[11px] text-slate-500 mt-1 flex justify-between font-mono">
                     <span>Kullanılabilir Nakit:</span>
-                    <span id="val-avail" class="text-emerald-400 font-bold">$5,000.00</span>
+                    <span id="val-avail" class="text-emerald-400 font-bold">$10,000.00</span>
                 </div>
             </div>
 
-            <!-- 2. Toplam Kâr / Zarar -->
+            <!-- 2. Toplam Kâr / Zarar & Günlük Performans -->
             <div class="card p-4">
-                <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Net Kâr / Zarar (PnL)</div>
-                <div id="val-profit" class="text-2xl font-black font-mono mt-1 text-slate-300">+$0.00</div>
+                <div class="flex justify-between items-center">
+                    <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Net Kâr / Zarar (Toplam)</div>
+                    <span id="badge-daily-pnl" class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">Bugün: $0.00</span>
+                </div>
+                <div id="val-profit" class="text-2xl font-black font-mono mt-1 text-slate-300">$0.00</div>
                 <div class="text-[11px] text-slate-500 mt-1 flex justify-between font-mono">
                     <span id="lbl-fee-note" class="text-slate-400">Komisyon: $0.00</span>
-                    <span id="val-daily-target" class="text-blue-400 font-bold">+$100.00</span>
+                    <span id="val-daily-target" class="text-blue-400 font-bold">+$50.00</span>
                 </div>
             </div>
 
@@ -249,7 +245,7 @@
         <div id="view-bot" class="space-y-4">
 
             <!-- MATEMATİKSEL EXPECTANCY VE EDGE RADARI (KANTİTATİF BAŞABAŞ VE KÂRLILIK REHBERİ) -->
-            <div class="card p-5 border-emerald-900/40 bg-gradient-to-r from-[#111827] via-[#0c1824] to-[#111827] space-y-3.5 shadow-lg">
+            <div class="card p-5 border-emerald-900/40 bg-gradient-to-r from-[#111827] via-[#1f1f24] to-[#111827] space-y-3.5 shadow-lg">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-cardBorder">
                     <div class="flex items-center gap-2.5">
                         <div class="w-9 h-9 rounded-xl bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center justify-center font-bold text-base shadow-sm">
@@ -340,6 +336,78 @@
                 </div>
             </div>
 
+            <!-- B) CONTEXTUAL MULTI-ARMED BANDIT (BAYESIAN THOMPSON SAMPLING ÖĞRENME MOTORU) -->
+            <div class="card p-3.5 border-blue-900/40 bg-gradient-to-r from-[#161b26] via-[#202024] to-[#161b26] space-y-2.5 shadow-xl">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-cardBorder">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-lg bg-blue-950 text-blue-400 border border-blue-800 flex items-center justify-center font-bold text-sm shadow-sm">
+                            🎰
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-xs font-bold text-white tracking-wide">Contextual Multi-Armed Bandit (Bayesian Thompson Sampling)</h3>
+                                <span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-blue-950 text-blue-400 border border-blue-800">
+                                    OTONOM ÖĞRENME AKTİF
+                                </span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-0.5">
+                                25 Kol (5 Strateji × 5 Risk Seviyesi) × 6 Rejim. Normal-Gamma posterior ile piyasaya dinamik adapte olur.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-mono text-slate-400 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800">
+                            Öğrenilen Kol: <b id="bandit-total-arms" class="text-cyan-400">25</b> / <b class="text-blue-400">6 Rejim</b>
+                        </span>
+                        <button onclick="toggleBanditDetails()" id="btn-toggle-bandit" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 flex items-center gap-1 transition">
+                            <span>🔽 Tabloyu Gizle / Göster</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 6 Piyasa Rejimi İçin En İyi Tercih Kartları (Grid) -->
+                <div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Makro Rejim Politika Matrisi (Öğrenilmiş Tercihler)</div>
+                    <div id="bandit-context-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+                        <!-- JS renders 6 context badges here -->
+                    </div>
+                </div>
+
+                <!-- Canlı Kol Dağılım ve Posterior İstatistikleri Tablosu (Daraltılabilir / Max Height) -->
+                <div id="bandit-details-section" class="space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Aktif Rejim Kol Dağılımı ve Bayesian Parametreleri</div>
+                        <select id="bandit-context-select" onchange="renderBanditTable()" class="bg-slate-900 text-[11px] text-slate-300 px-2 py-0.5 rounded-lg border border-slate-700">
+                            <option value="BTC_BULL_LOW_VOL">BTC Bull + Düşük Volatilite</option>
+                            <option value="BTC_BULL_HIGH_VOL">BTC Bull + Yüksek Volatilite</option>
+                            <option value="BTC_BEAR_LOW_VOL">BTC Bear + Düşük Volatilite</option>
+                            <option value="BTC_BEAR_HIGH_VOL">BTC Bear + Yüksek Volatilite</option>
+                            <option value="BTC_RANGING_LOW_VOL" selected>BTC Yatay + Düşük Volatilite</option>
+                            <option value="BTC_RANGING_HIGH_VOL">BTC Yatay + Yüksek Volatilite</option>
+                        </select>
+                    </div>
+
+                    <div class="overflow-x-auto max-h-[220px] overflow-y-auto rounded-lg border border-cardBorder/70">
+                        <table class="w-full text-left text-xs">
+                            <thead class="sticky top-0 bg-slate-900/95 backdrop-blur text-slate-400 font-mono text-[10px] uppercase border-b border-cardBorder z-10">
+                                <tr>
+                                    <th class="py-1.5 px-2">Strateji</th>
+                                    <th class="py-1.5 px-2">Risk Profili</th>
+                                    <th class="py-1.5 px-2 text-right">Beklenen Getiri (μ)</th>
+                                    <th class="py-1.5 px-2 text-right">Örneklem (n)</th>
+                                    <th class="py-1.5 px-2 text-right">Şekil (α) / Ölçek (β)</th>
+                                    <th class="py-1.5 px-2 text-right">Toplam İşlem</th>
+                                    <th class="py-1.5 px-2 text-center">Durum</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bandit-table-body" class="divide-y divide-slate-800/60 font-mono text-[11px]">
+                                <tr><td colspan="7" class="py-3 text-center text-slate-500 italic">Bandit verileri yükleniyor...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- C) CANLI BOT AKTİVİTE & TERMİNAL LOGLARI -->
             <div class="card p-5">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-cardBorder">
@@ -391,40 +459,41 @@
             </div>
 
             <!-- B) AÇIK POZİSYONLARIM TABLOSU (Elimdeki Kriptolar) -->
-            <div class="card p-5">
-                <div class="flex items-center justify-between mb-3">
+            <div class="card p-3.5">
+                <div class="flex items-center justify-between mb-2">
                     <div>
-                        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <h3 class="text-xs font-bold text-white flex items-center gap-2">
                             <span>📦</span>
                             <span>Elimdeki Kripto Paralar (Açık Pozisyonlar)</span>
-                            <span id="badge-open-count" class="bg-blue-950 text-blue-400 text-xs px-2.5 py-0.5 rounded-full font-mono font-bold">0</span>
+                            <span id="badge-open-count" class="bg-blue-950 text-blue-400 text-[10px] px-2 py-0.2 rounded-full font-mono font-bold">0</span>
                         </h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Kâr hedefine ulaştığında bot otomatik satar veya siz hemen kapatabilirsiniz</p>
+                        <p class="text-[10px] text-slate-400 mt-0.5">Kâr hedefine ulaştığında bot otomatik satar veya siz hemen kapatabilirsiniz</p>
                     </div>
-                    <span class="text-xs font-mono text-slate-500">15m Bar Analizi</span>
+                    <span class="text-[10px] font-mono text-slate-500">15m Bar Analizi</span>
                 </div>
 
-                <div class="overflow-x-auto">
+                <div class="overflow-x-auto max-h-[260px] overflow-y-auto rounded-lg border border-cardBorder/70">
                     <table class="w-full text-left text-xs font-mono">
-                        <thead class="bg-slate-900/80 text-slate-400 border-b border-cardBorder">
+                        <thead class="sticky top-0 bg-slate-900/95 backdrop-blur text-slate-400 border-b border-cardBorder z-10 text-[10px] uppercase">
                             <tr>
-                                <th class="p-3">Sembol</th>
-                                <th class="p-3">Yön</th>
-                                <th class="p-3">Alım Tutarı & Miktar</th>
-                                <th class="p-3">Alış Fiyatı</th>
-                                <th class="p-3">Güncel Fiyat</th>
-                                <th class="p-3">Hedef (TP)</th>
-                                <th class="p-3">Zarar Durdur (SL)</th>
-                                <th class="p-3">Anlık Net Kâr/Zarar</th>
-                                <th class="p-3 text-center">Neden Alındı?</th>
-                                <th class="p-3 text-right">Aksiyon</th>
+                                <th class="py-1.5 px-2">Sembol</th>
+                                <th class="py-1.5 px-2">Yön</th>
+                                <th class="py-1.5 px-2">Tutar & Miktar</th>
+                                <th class="py-1.5 px-2">Alış Fiyatı</th>
+                                <th class="py-1.5 px-2">Güncel Fiyat</th>
+                                <th class="py-1.5 px-2">Hedef (TP)</th>
+                                <th class="py-1.5 px-2">Zarar Durdur</th>
+                                <th class="py-1.5 px-2">Komisyon</th>
+                                <th class="py-1.5 px-2">Net Kâr/Zarar</th>
+                                <th class="py-1.5 px-2 text-center">Neden?</th>
+                                <th class="py-1.5 px-2 text-right">Aksiyon</th>
                             </tr>
                         </thead>
-                        <tbody id="list-positions" class="divide-y divide-cardBorder">
+                        <tbody id="list-positions" class="divide-y divide-cardBorder text-[11px]">
                             <tr>
-                                <td colspan="10" class="p-8 text-center text-slate-500 font-sans">
-                                    <div class="font-semibold text-slate-400 text-sm mb-1">Şu anda açık pozisyonunuz bulunmuyor</div>
-                                    <div class="text-xs">Bot canlı piyasayı tarar, dip tespit edildiğinde otomatik alım yapıp buraya ekler.</div>
+                                <td colspan="11" class="py-4 text-center text-slate-500 font-sans">
+                                    <div class="font-semibold text-slate-400 text-xs mb-0.5">Şu anda açık pozisyonunuz bulunmuyor</div>
+                                    <div class="text-[10px]">Bot canlı piyasayı tarar, dip tespit edildiğinde otomatik alım yapıp buraya ekler.</div>
                                 </td>
                             </tr>
                         </tbody>
@@ -432,20 +501,20 @@
                 </div>
 
                 <!-- Kendin Dene Hızlı Test Alımı Kutusu -->
-                <div class="mt-4 pt-4 border-t border-cardBorder flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/40 p-3.5 rounded-xl">
+                <div class="mt-2 pt-2 border-t border-cardBorder flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-900/40 p-2 rounded-lg text-xs">
                     <div>
-                        <div class="text-xs font-bold text-slate-300">🎮 Kendin Dene (Simülasyon Test Emri)</div>
-                        <div class="text-[11px] text-slate-500">Botu beklemeden sanal bakiye ile tek tıkla test işlemi açıp kâr/zararı canlı izleyin.</div>
+                        <div class="text-[11px] font-bold text-slate-300">🎮 Kendin Dene (Simülasyon Test Emri)</div>
+                        <div class="text-[10px] text-slate-500">Botu beklemeden sanal bakiye ile test işlemi açıp canlı izleyin.</div>
                     </div>
-                    <div class="flex items-center gap-2 text-xs">
-                        <select id="sel-test-symbol" class="bg-slate-900 border border-cardBorder rounded-lg px-2.5 py-1.5 text-white font-mono">
+                    <div class="flex items-center gap-1.5 text-xs">
+                        <select id="sel-test-symbol" class="bg-slate-900 border border-cardBorder rounded-lg px-2 py-1 text-white font-mono text-xs">
                             <option value="BTC/USDT">BTC/USDT</option>
                             <option value="ETH/USDT">ETH/USDT</option>
                             <option value="SOL/USDT">SOL/USDT</option>
                         </select>
-                        <input type="number" id="inp-test-amount" value="100" class="w-20 bg-slate-900 border border-cardBorder rounded-lg px-2 py-1.5 text-white font-mono text-center">
-                        <span class="text-slate-400">$</span>
-                        <button onclick="quickBuy()" class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition">
+                        <input type="number" id="inp-test-amount" value="100" class="w-16 bg-slate-900 border border-cardBorder rounded-lg px-1.5 py-1 text-white font-mono text-center text-xs">
+                        <span class="text-slate-400 text-xs">$</span>
+                        <button onclick="quickBuy()" class="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition text-xs">
                             Alış Yap
                         </button>
                     </div>
@@ -657,7 +726,7 @@
                     </div>
                     <div>
                         <label class="block text-slate-400 mb-1">Sanal Sermaye ($)</label>
-                        <input type="number" id="bt-capital" value="5000" class="w-full bg-slate-900 border border-cardBorder rounded-lg p-2 text-white font-mono">
+                        <input type="number" id="bt-capital" value="10000" class="w-full bg-slate-900 border border-cardBorder rounded-lg p-2 text-white font-mono">
                     </div>
                     <div class="flex items-end">
                         <button onclick="runBacktest()" id="btn-run-bt" class="w-full p-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition flex items-center justify-center gap-2">
@@ -808,10 +877,10 @@
                 <!-- 1. Net Varlık / Portföy -->
                 <div class="card p-3.5 flex flex-col justify-between">
                     <div class="text-[11px] text-slate-400 font-medium">Toplam Portföy (Equity)</div>
-                    <div id="rep-equity" class="text-xl font-black text-white font-mono mt-1">$5,000.00</div>
+                    <div id="rep-equity" class="text-xl font-black text-white font-mono mt-1">$10,000.00</div>
                     <div class="text-[10px] text-slate-500 mt-1 flex justify-between font-mono">
                         <span>Başlangıç:</span>
-                        <span id="rep-initial-cap" class="text-slate-400">$5,000.00</span>
+                        <span id="rep-initial-cap" class="text-slate-400">$10,000.00</span>
                     </div>
                 </div>
 
@@ -867,7 +936,7 @@
             </div>
 
             <!-- MATEMATİKSEL EXPECTANCY VE BAŞABAŞ ANALİZİ (QUANT EDGE TEARSHEET) -->
-            <div class="card p-5 space-y-3.5 border-emerald-900/40 bg-gradient-to-r from-[#111827] via-[#0d1c2b] to-[#111827]">
+            <div class="card p-5 space-y-3.5 border-emerald-900/40 bg-gradient-to-r from-[#111827] via-[#1f1f24] to-[#111827]">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-cardBorder pb-2.5">
                     <div>
                         <h3 class="text-sm font-bold text-white flex items-center gap-2">
@@ -905,10 +974,10 @@
                         <div id="rep-exp-buffer" class="text-lg font-black font-mono text-emerald-400">+%19.4</div>
                         <div class="text-[10px] text-slate-500">Başabaş Eşiği Üzeri</div>
                     </div>
-                    <div class="inner-card p-3 space-y-1 border-emerald-900/50 bg-emerald-950/20 col-span-2 md:col-span-1">
+                    <div class="inner-card p-3 space-y-1 border-slate-800 bg-slate-900/40 col-span-2 md:col-span-1">
                         <div class="text-slate-400 text-[11px]">Devre Kesici Güvencesi</div>
-                        <div id="rep-exp-guard" class="text-xs font-bold text-emerald-300">OTOMATİK AKTİF</div>
-                        <div class="text-[10px] text-slate-400">Expectancy &le; 0 ise durur</div>
+                        <div id="rep-exp-guard" class="text-xs font-bold text-amber-300">DEVRE KESİCİ AKTİF</div>
+                        <div class="text-[10px] text-slate-400">Negatif beklenti durumunda alımlar durdurulur</div>
                     </div>
                 </div>
 
@@ -1204,10 +1273,11 @@
         let activeTab = 'bot';
 
         function getAuthHeaders(customHeaders = {}) {
-            const key = typeof window !== 'undefined' ? localStorage.getItem('KRIPTO_API_KEY') : null;
+            const key = typeof window !== 'undefined' ? (localStorage.getItem('KRIPTO_API_KEY') || '') : '';
             const headers = { ...customHeaders };
             if (key) {
                 headers['X-API-KEY'] = key;
+                headers['Authorization'] = `Bearer ${key}`;
             }
             return headers;
         }
@@ -1567,11 +1637,12 @@
                         selStrat.value = String(sys.active_strategy_id);
                     }
 
-                    const initialCapital = Number(sys.initial_capital !== undefined ? sys.initial_capital : 5000);
+                    const initialCapital = Number(sys.initial_capital !== undefined ? sys.initial_capital : 10000);
                     const equity = Number(sys.equity !== undefined ? sys.equity : initialCapital);
                     const available = Number(sys.available_balance !== undefined ? sys.available_balance : (sys.balance || initialCapital));
                     const totalFees = Number(sys.total_fees || 0);
-                    const netProfit = Number(sys.daily_pnl !== undefined ? sys.daily_pnl : (equity - initialCapital));
+                    const totalNetPnl = Number(sys.lifetime_equity_change !== undefined ? sys.lifetime_equity_change : (equity - initialCapital));
+                    const dailyPnl = Number(sys.daily_pnl !== undefined ? sys.daily_pnl : 0);
                     const maxOpen = Number(sys.max_open_positions || (sys.active_risk_profile ? sys.active_risk_profile.max_open_positions : 5));
 
                     document.getElementById('val-balance').innerText = '$' + equity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1582,28 +1653,45 @@
                         feeEl.innerText = totalFees > 0 ? `Komisyon: -$${totalFees.toFixed(2)}` : 'Komisyon: $0.00';
                     }
 
+                    // 1. Ana Büyük Değer: Toplam Net Kâr / Zarar (Portföy Değişimi ile %100 Uyumlu)
                     const profitEl = document.getElementById('val-profit');
-                    if (netProfit > 0) {
-                        profitEl.innerText = '+$' + netProfit.toFixed(2);
+                    if (totalNetPnl > 0) {
+                        profitEl.innerText = '+$' + totalNetPnl.toFixed(2);
                         profitEl.className = 'text-2xl font-black font-mono mt-1 text-emerald-400';
-                    } else if (netProfit < 0) {
-                        profitEl.innerText = '-$' + Math.abs(netProfit).toFixed(2);
+                    } else if (totalNetPnl < 0) {
+                        profitEl.innerText = '-$' + Math.abs(totalNetPnl).toFixed(2);
                         profitEl.className = 'text-2xl font-black font-mono mt-1 text-red-400';
                     } else {
-                        profitEl.innerText = '+$0.00';
+                        profitEl.innerText = '$0.00';
                         profitEl.className = 'text-2xl font-black font-mono mt-1 text-slate-300';
                     }
 
+                    // 2. Rozet: Bugünkü Net Kâr / Zarar
+                    const dailyBadgeEl = document.getElementById('badge-daily-pnl');
+                    if (dailyBadgeEl) {
+                        if (dailyPnl > 0) {
+                            dailyBadgeEl.innerText = `Bugün: +$${dailyPnl.toFixed(2)}`;
+                            dailyBadgeEl.className = 'text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60';
+                        } else if (dailyPnl < 0) {
+                            dailyBadgeEl.innerText = `Bugün: -$${Math.abs(dailyPnl).toFixed(2)}`;
+                            dailyBadgeEl.className = 'text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-950/80 text-red-400 border border-red-800/60';
+                        } else {
+                            dailyBadgeEl.innerText = 'Bugün: $0.00';
+                            dailyBadgeEl.className = 'text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700';
+                        }
+                    }
+
+                    // 3. Günlük Hedef (Bugünkü PnL üzerinden)
                     const targetEl = document.getElementById('val-daily-target');
-                    const targetGoal = Number(sys.daily_target || 100.0);
+                    const targetGoal = Number(sys.daily_target || 50.0);
                     if (targetEl) {
-                        if (netProfit >= targetGoal) {
+                        if (dailyPnl >= targetGoal) {
                             targetEl.innerHTML = `<span class="text-emerald-400 font-bold">+$${targetGoal.toFixed(2)} (🎯 Tamamlandı!)</span>`;
-                        } else if (netProfit > 0) {
-                            const pct = Math.min(100, Math.round((netProfit / targetGoal) * 100));
+                        } else if (dailyPnl > 0) {
+                            const pct = Math.min(100, Math.round((dailyPnl / targetGoal) * 100));
                             targetEl.innerHTML = `<span class="text-blue-400 font-bold">+$${targetGoal.toFixed(2)}</span> <span class="text-[10px] text-emerald-400 font-mono font-bold">(%${pct})</span>`;
                         } else {
-                            targetEl.innerHTML = `<span class="text-blue-400 font-bold">+$${targetGoal.toFixed(2)}</span>`;
+                            targetEl.innerHTML = `<span class="text-blue-400 font-bold">Hedef: +$${targetGoal.toFixed(2)}</span>`;
                         }
                     }
                 }
@@ -1626,32 +1714,39 @@
                             const notionalUsd = (Number(p.entry_price || p.current_price) * Number(p.quantity)).toFixed(2);
                             const coinBase = (p.symbol || '').split('/')[0];
                             return `
-                            <tr class="hover:bg-slate-900/60 transition">
-                                <td class="p-3 font-bold text-white flex items-center gap-2">
-                                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <tr class="hover:bg-slate-900/60 transition ${p.price_stale ? 'bg-amber-950/10' : ''}">
+                                <td class="py-1.5 px-2 font-bold text-white flex items-center gap-1.5 whitespace-nowrap">
+                                    <span class="w-1.5 h-1.5 rounded-full ${p.price_stale ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'} shrink-0"></span>
                                     <span>${p.symbol}</span>
+                                    ${p.price_stale ? '<span class="px-1 py-0.2 rounded text-[9px] font-extrabold bg-amber-950/90 text-amber-300 border border-amber-700 animate-pulse">⚠️ Donuk</span>' : ''}
                                 </td>
-                                <td class="p-3 font-semibold text-emerald-400">${p.side}</td>
-                                <td class="p-3 font-mono">
-                                    <div class="font-bold text-white tracking-tight">$${notionalUsd}</div>
-                                    <div class="text-[10px] text-slate-400 font-sans">${Number(p.quantity)} ${coinBase}</div>
+                                <td class="py-1.5 px-2 font-semibold text-emerald-400 text-[11px]">${p.side}</td>
+                                <td class="py-1.5 px-2 font-mono">
+                                    <div class="font-bold text-white tracking-tight text-[11px]">$${notionalUsd}</div>
+                                    <div class="text-[9px] text-slate-400 font-sans">${Number(p.quantity)} ${coinBase}</div>
                                 </td>
-                                <td class="p-3 text-slate-300 font-mono">${formatPrice(p.entry_price)}</td>
-                                <td class="p-3 font-bold text-white font-mono">${formatPrice(p.current_price)}</td>
-                                <td class="p-3 text-emerald-400 font-semibold font-mono">${formatPrice(p.take_profit)}</td>
-                                <td class="p-3 text-red-400 font-mono">${formatPrice(p.stop_loss)}</td>
-                                <td class="p-3 font-bold text-sm ${Number(p.unrealized_pnl || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}">
+                                <td class="py-1.5 px-2 text-slate-300 font-mono text-[11px]">${formatPrice(p.entry_price)}</td>
+                                <td class="py-1.5 px-2 font-bold text-white font-mono text-[11px]">
+                                    ${formatPrice(p.current_price)}
+                                    ${p.price_stale ? '<div class="text-[8px] text-amber-400 font-sans font-medium">⚠️ Güncellenemiyor</div>' : ''}
+                                </td>
+                                <td class="py-1.5 px-2 text-emerald-400 font-semibold font-mono text-[11px]">${formatPrice(p.take_profit)}</td>
+                                <td class="py-1.5 px-2 text-red-400 font-mono text-[11px]">${formatPrice(p.stop_loss)}</td>
+                                <td class="py-1.5 px-2 text-amber-400 font-mono text-[10px] whitespace-nowrap">
+                                    $${Number(p.fees_paid !== undefined && p.fees_paid !== null ? p.fees_paid : (Number(notionalUsd) * 0.001)).toFixed(2)}
+                                </td>
+                                <td class="py-1.5 px-2 font-bold text-xs ${Number(p.unrealized_pnl || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}">
                                     ${Number(p.unrealized_pnl || 0) >= 0 ? '+' : ''}$${Number(p.unrealized_pnl || 0).toFixed(2)}
                                 </td>
-                                <td class="p-3 text-center">
+                                <td class="py-1.5 px-2 text-center">
                                     <button onclick="openTradeInfoModal('${p.symbol}', '${p.side}', ${p.entry_price}, ${p.current_price}, ${p.take_profit}, ${p.stop_loss}, '${p.strategy || 'R10_Causal'}', ${p.quantity}, ${p.unrealized_pnl || 0}, false)" 
-                                            class="px-2.5 py-1 rounded-lg bg-blue-950/80 hover:bg-blue-900 text-blue-300 hover:text-white text-xs font-semibold border border-blue-800/80 transition flex items-center gap-1 mx-auto shadow-sm">
+                                            class="px-2 py-0.5 rounded bg-blue-950/80 hover:bg-blue-900 text-blue-300 hover:text-white text-[10px] font-semibold border border-blue-800/80 transition flex items-center gap-1 mx-auto shadow-sm">
                                         <span>ℹ️</span>
                                         <span>Gerekçe</span>
                                     </button>
                                 </td>
-                                <td class="p-3 text-right">
-                                    <button onclick="closePosition('${p.position_id}')" class="px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 text-xs font-bold border border-red-800 transition">
+                                <td class="py-1.5 px-2 text-right">
+                                    <button onclick="closePosition('${p.position_id}')" class="px-2 py-0.5 rounded bg-red-950 hover:bg-red-900 text-red-300 text-[10px] font-bold border border-red-800 transition">
                                         Kapat
                                     </button>
                                 </td>
@@ -1661,8 +1756,8 @@
                     } else {
                         tbody.innerHTML = `
                             <tr>
-                                <td colspan="10" class="p-8 text-center text-slate-500 font-sans">
-                                    <div class="font-semibold text-slate-400 text-sm mb-1">Şu anda açık pozisyonunuz bulunmuyor</div>
+                                <td colspan="11" class="py-4 text-center text-slate-500 font-sans">
+                                    <div class="font-semibold text-slate-400 text-xs mb-0.5">Şu anda açık pozisyonunuz bulunmuyor</div>
                                     <div class="text-xs">Bot canlı piyasayı tarar, dip tespit edildiğinde otomatik alım yapıp buraya ekler.</div>
                                 </td>
                             </tr>
@@ -1870,7 +1965,9 @@
                 const data = await res.json();
                 if (res.ok && data.success) {
                     const friendlyNames = {
-                        'r10_rsi_divergence': '🤖 Akıllı Otomatik (Dip Avcısı)',
+                        'turbo_fast_strike': '⚡ Turbo Hızlı Vur-Kaç (Scalp Modu)',
+                        'r10_rsi_divergence': '🤖 R10 RSI Uyumsuzluğu (Dip Avcısı)',
+                        'momentum_dip_rebound': '📈 Dinamik Momentum & Dip Dönüşü (Araştırma Modu)',
                         'regime_gated_pullback': '📈 Yükseliş Trendi (Pullback)',
                         'mean_reversion': '⚡ Hızlı Tepki Alımı',
                         'trend_following': '🚀 Momentum & Kırılım'
@@ -1886,9 +1983,9 @@
             }
         }
 
-        // Paper Hesabını Sıfırla ($5,000)
+        // Paper Hesabını Sıfırla ($10,000)
         async function resetPaperAccount() {
-            if (!confirm('Tüm paper işlemleri sıfırlanıp bakiye $5,000.00 olarak baştan başlatılacaktır. Onaylıyor musunuz?')) return;
+            // Direct execution without confirm prompt
             try {
                 const res = await fetch(`${API_BASE}/api/system/reset-experiment`, {
                     method: 'POST',
@@ -1897,7 +1994,7 @@
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    showAlert('Paper hesabı ve işlemler başarıyla sıfırlandı ($5,000).', true);
+                    showAlert('Paper hesabı ve işlemler başarıyla sıfırlandı ($10,000).', true);
                     refreshData();
                 } else {
                     showAlert(data.detail || data.message || 'Sıfırlama başarısız', false);
@@ -1925,7 +2022,7 @@
 
         // Acil Stop
         async function emergencyStop() {
-            if (!confirm('Tüm açık işlemleri derhal dondurup botu kapatmak istiyor musunuz?')) return;
+            // Direct execution without confirm prompt
             try {
                 await fetch(`${API_BASE}/api/v1/risk/emergency-stop`, { 
                     method: 'POST',
@@ -1993,7 +2090,7 @@
                         symbol: document.getElementById('bt-symbol').value,
                         timeframe: document.getElementById('bt-timeframe').value,
                         strategy: 'r10_rsi_divergence',
-                        initial_capital: parseFloat(document.getElementById('bt-capital').value) || 5000,
+                        initial_capital: parseFloat(document.getElementById('bt-capital').value) || 10000,
                         fees: 0.001,
                         slippage_bps: 5.0
                     })
@@ -2160,6 +2257,10 @@
                     elBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-950 text-red-400 border border-red-800 animate-pulse';
                     if (elDot) elDot.className = 'w-2 h-2 rounded-full bg-red-500 shrink-0 animate-ping';
                     if (elBox) elBox.className = 'p-2.5 rounded-xl bg-red-950/40 border border-red-800/80 text-[11px] text-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2';
+                } else if (exp.status === "UNRESTRICTED_TRADING" || exp.status_badge === "DEVRE KESİCİ KALDIRILDI") {
+                    elBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-950 text-emerald-300 border border-emerald-700 shadow-sm';
+                    if (elDot) elDot.className = 'w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-pulse';
+                    if (elBox) elBox.className = 'p-2.5 rounded-xl bg-slate-900/80 border border-emerald-800/60 text-[11px] text-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2';
                 } else if (exp.is_positive_expectancy) {
                     elBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-950 text-emerald-400 border border-emerald-800';
                     if (elDot) elDot.className = 'w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-pulse';
@@ -2175,6 +2276,8 @@
             if (elDesc) {
                 if (exp.should_halt) {
                     elDesc.innerHTML = `<b class="text-red-400">🛑 DEVRE KESİCİ DEVREDE:</b> Beklenen getiri ($${Number(exp.expectancy_usd_per_trade).toFixed(2)}) negatife döndü. WinRate (%${Number(exp.win_rate_pct).toFixed(1)}) başabaş eşiğinin (%${Number(exp.breakeven_win_rate_pct).toFixed(1)}) altına indi. Alımlar durduruldu!`;
+                } else if (exp.status === "UNRESTRICTED_TRADING" || exp.status_badge === "DEVRE KESİCİ KALDIRILDI") {
+                    elDesc.innerHTML = `<b class="text-emerald-400">⚡ DEVRE KESİCİ KALDIRILDI (SERBEST MOD):</b> Kullanıcı talimatıyla devre kesici kapatıldı. Beklenen getiri ($${Number(exp.expectancy_usd_per_trade).toFixed(2)}) izleniyor, sistem kesintisiz öğrenmeye ve işlem yapmaya devam ediyor.`;
                 } else if (exp.is_positive_expectancy) {
                     elDesc.innerHTML = `✅ <b>Yöndesiniz:</b> Dar stop ($${Number(exp.average_loss_usd).toFixed(2)}) ve geniş hedef ($${Number(exp.average_win_usd).toFixed(2)}) asimetrisi (b=${Number(exp.win_loss_ratio_b).toFixed(2)}x) sayesinde başabaş kazanma eşiğiniz %${Number(exp.breakeven_win_rate_pct).toFixed(1)}'dir. WinRate %50'nin altına gerilese bile kârlılık korunur.`;
                 } else {
@@ -2214,7 +2317,7 @@
 
             // 6'lı KPI Kartları
             const curEquity = Number(s.current_equity || 0);
-            const initCap = Number(s.initial_capital || 5000);
+            const initCap = Number(s.initial_capital || 10000);
             const netRoi = Number(s.net_roi_pct || 0);
             const netPnl = Number(s.net_pnl_total || 0);
             const pf = Number(s.profit_factor || 0);
@@ -2305,11 +2408,15 @@
                 const repBadge = document.getElementById('rep-exp-badge');
                 if (repBadge) {
                     repBadge.innerText = exp.status_badge || (exp.is_positive_expectancy ? 'YÖNDESİNİZ' : 'İZLENİYOR');
-                    repBadge.className = exp.should_halt
-                        ? 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-950 text-red-400 border border-red-800 animate-pulse'
-                        : (exp.is_positive_expectancy
-                            ? 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-950 text-emerald-400 border border-emerald-800'
-                            : 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-800 text-slate-400 border border-slate-700');
+                    if (exp.should_halt) {
+                        repBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-red-950 text-red-400 border border-red-800 animate-pulse';
+                    } else if (exp.status === "UNRESTRICTED_TRADING" || exp.status_badge === "DEVRE KESİCİ KALDIRILDI") {
+                        repBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-950 text-emerald-300 border border-emerald-700';
+                    } else if (exp.is_positive_expectancy) {
+                        repBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-950 text-emerald-400 border border-emerald-800';
+                    } else {
+                        repBadge.className = 'px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-800 text-slate-400 border border-slate-700';
+                    }
                 }
 
                 const repUsd = document.getElementById('rep-exp-usd');
@@ -2341,6 +2448,9 @@
                     if (exp.should_halt) {
                         repGuard.innerText = 'DURDURMA DEVREDE';
                         repGuard.className = 'text-xs font-bold text-red-400';
+                    } else if (exp.status === "UNRESTRICTED_TRADING" || exp.status_badge === "DEVRE KESİCİ KALDIRILDI") {
+                        repGuard.innerText = 'DEVRE KESİCİ KALDIRILDI (SERBEST MOD)';
+                        repGuard.className = 'text-xs font-bold text-emerald-300';
                     } else {
                         repGuard.innerText = 'OTOMATİK AKTİF';
                         repGuard.className = 'text-xs font-bold text-emerald-300';
@@ -2493,7 +2603,7 @@
 
             const text = `📊 KRIPTO AGENT — TÜM ZAMANLAR İŞLEM ÖZETİ VE YATIRIMCI RAPORU
 ────────────────────────────────────────
-• Başlangıç Sermayesi: $${Number(s.initial_capital || 5000).toFixed(2)}
+• Başlangıç Sermayesi: $${Number(s.initial_capital || 10000).toFixed(2)}
 • Güncel Net Varlık (Equity): $${Number(s.current_equity || 0).toFixed(2)}
 • Net Büyüme (ROI): ${netRoi >= 0 ? '+' : ''}%${netRoi.toFixed(2)}
 • Net Realize Kâr/Zarar: ${netReal >= 0 ? '+' : ''}$${netReal.toFixed(2)}
@@ -2711,7 +2821,7 @@ Veri Kaynağı: Binance Spot Canlı Eşleşme Motoru (Zero Fake Data)`;
                         width: width,
                         height: height,
                         layout: {
-                            background: { color: '#0a0f1d' },
+                            background: { color: '#1a1a1e' },
                             textColor: '#94a3b8',
                             fontSize: 10,
                         },
@@ -2823,7 +2933,7 @@ Veri Kaynağı: Binance Spot Canlı Eşleşme Motoru (Zero Fake Data)`;
             ctx.scale(dpr, dpr);
 
             ctx.clearRect(0, 0, w, h);
-            ctx.fillStyle = '#0a0f1d';
+            ctx.fillStyle = '#1a1a1e';
             ctx.fillRect(0, 0, w, h);
 
             if (!data || data.length === 0) return;
@@ -3046,6 +3156,109 @@ Veri Kaynağı: Binance Spot Canlı Eşleşme Motoru (Zero Fake Data)`;
             }
         }
 
+        // =====================================================================
+        // BAYESIAN CONTEXTUAL BANDIT ÖĞRENME MOTORU İSTEMCİSİ
+        // =====================================================================
+        let banditData = null;
+
+        async function fetchBanditState() {
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/learning/bandit-state`);
+                if (!res.ok) return;
+                const data = await res.json();
+                banditData = data;
+                renderBanditContextGrid();
+                renderBanditTable();
+            } catch (e) {
+                console.error("Bandit fetch error:", e);
+            }
+        }
+
+        function renderBanditContextGrid() {
+            if (!banditData || !banditData.preferred_by_context) return;
+            const container = document.getElementById('bandit-context-grid');
+            if (!container) return;
+
+            const ctxLabels = {
+                "BTC_BULL_LOW_VOL": "Bull + Düşük Vol",
+                "BTC_BULL_HIGH_VOL": "Bull + Yüksek Vol",
+                "BTC_BEAR_LOW_VOL": "Bear + Düşük Vol",
+                "BTC_BEAR_HIGH_VOL": "Bear + Yüksek Vol",
+                "BTC_RANGING_LOW_VOL": "Yatay + Düşük Vol",
+                "BTC_RANGING_HIGH_VOL": "Yatay + Yüksek Vol",
+            };
+
+            const html = Object.entries(banditData.preferred_by_context).map(([ctx, best]) => {
+                const lbl = ctxLabels[ctx] || ctx;
+                const muVal = Number(best.mu || 0);
+                const muSign = muVal >= 0 ? '+' : '';
+                const stratShort = (best.strategy_id || 'momentum').replace(/_/g, ' ');
+                return `
+                    <div class="inner-card p-2 space-y-0.5 bg-[#1a1a1e] border border-slate-800">
+                        <div class="text-[9px] text-slate-400 font-medium truncate" title="${ctx}">${lbl}</div>
+                        <div class="text-[11px] font-bold text-white truncate">${stratShort}</div>
+                        <div class="flex items-center justify-between text-[10px] font-mono">
+                            <span class="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 font-bold">L${best.risk_level}</span>
+                            <span class="${muVal >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold">${muSign}${muVal.toFixed(2)} R</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        function toggleBanditDetails() {
+            const section = document.getElementById('bandit-details-section');
+            const btn = document.getElementById('btn-toggle-bandit');
+            if (!section) return;
+            if (section.classList.contains('hidden')) {
+                section.classList.remove('hidden');
+                if (btn) btn.innerHTML = '<span>🔼 Tabloyu Gizle</span>';
+            } else {
+                section.classList.add('hidden');
+                if (btn) btn.innerHTML = '<span>🔽 Tabloyu Aç (25 Kol)</span>';
+            }
+        }
+
+        function renderBanditTable() {
+            if (!banditData || !banditData.posteriors) return;
+            const sel = document.getElementById('bandit-context-select');
+            const ctx = sel ? sel.value : "BTC_RANGING_LOW_VOL";
+            const tbody = document.getElementById('bandit-table-body');
+            if (!tbody) return;
+
+            const list = banditData.posteriors[ctx] || [];
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="py-2 text-center text-slate-500 italic">Bu rejim için kayıt yok.</td></tr>';
+                return;
+            }
+
+            const sorted = [...list].sort((a, b) => b.mu - a.mu);
+
+            const rows = sorted.map(a => {
+                const muVal = Number(a.mu || 0);
+                const muSign = muVal >= 0 ? '+' : '';
+                const qStatus = a.is_quarantined
+                    ? '<span class="px-1.5 py-0.2 rounded text-[9px] bg-red-950 text-red-400 border border-red-800 animate-pulse">⛔ Karantina</span>'
+                    : '<span class="px-1.5 py-0.2 rounded text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800">✅ Aktif</span>';
+
+                return `
+                    <tr class="hover:bg-slate-900/50 transition">
+                        <td class="py-1.5 px-2 text-white font-semibold text-[11px]">${a.strategy_id}</td>
+                        <td class="py-1.5 px-2"><span class="px-1.5 py-0.2 rounded bg-blue-950 text-blue-300 font-bold text-[10px]">L${a.risk_level}</span></td>
+                        <td class="py-1.5 px-2 text-right font-bold text-[11px] ${muVal >= 0 ? 'text-emerald-400' : 'text-red-400'}">${muSign}${muVal.toFixed(3)} R</td>
+                        <td class="py-1.5 px-2 text-right text-slate-300 text-[11px]">${a.n}</td>
+                        <td class="py-1.5 px-2 text-right text-slate-400 text-[10px]">${a.alpha} / ${a.beta}</td>
+                        <td class="py-1.5 px-2 text-right text-cyan-400 font-bold text-[11px]">${a.total_trades}</td>
+                        <td class="py-1.5 px-2 text-center">${qStatus}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            tbody.innerHTML = rows;
+        }
+
         // İlk Yükleme ve Periyodik Yenileme
         refreshData();
         setInterval(refreshData, 2500);
@@ -3055,13 +3268,16 @@ Veri Kaynağı: Binance Spot Canlı Eşleşme Motoru (Zero Fake Data)`;
 
         fetchWhaleRadar();
         setInterval(fetchWhaleRadar, 2500);
+
+        fetchBanditState();
+        setInterval(fetchBanditState, 3000);
     </script>
 
     <!-- ================================================================= -->
     <!-- İŞLEM BİLGİSİ / ALIM GEREKÇESİ VE MUMLU GRAFİK MODALI (POPUP)    -->
     <!-- ================================================================= -->
     <div id="trade-info-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md transition-opacity" onclick="if(event.target===this) closeTradeInfoModal()">
-        <div class="relative w-full max-w-2xl bg-[#111827] border border-[#1f2d44] rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 text-white max-h-[92vh] overflow-y-auto" onclick="event.stopPropagation()">
+        <div class="relative w-full max-w-2xl bg-[#111827] border border-[#32323a] rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 text-white max-h-[92vh] overflow-y-auto" onclick="event.stopPropagation()">
             <!-- Başlık & Kapat Butonu -->
             <div class="flex items-center justify-between pb-3 border-b border-cardBorder">
                 <div class="flex items-center gap-3">
@@ -3108,8 +3324,8 @@ Veri Kaynağı: Binance Spot Canlı Eşleşme Motoru (Zero Fake Data)`;
                 </div>
 
                 <!-- Grafik Konteyneri -->
-                <div id="modal-chart-container" class="relative w-full h-[220px] rounded-lg overflow-hidden bg-[#0a0f1d] border border-slate-850">
-                    <div id="modal-chart-loading" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0a0f1d] text-slate-400 text-xs font-mono z-10">
+                <div id="modal-chart-container" class="relative w-full h-[220px] rounded-lg overflow-hidden bg-[#1a1a1e] border border-slate-850">
+                    <div id="modal-chart-loading" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1a1a1e] text-slate-400 text-xs font-mono z-10">
                         <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                         <span>Canlı Binance mum verisi yükleniyor...</span>
                     </div>

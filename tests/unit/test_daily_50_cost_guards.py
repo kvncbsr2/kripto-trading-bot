@@ -55,16 +55,18 @@ def test_configured_daily_trade_cap_reaches_circuit_breaker():
     assert "2/2" in decision.reason
 
 
-def test_unrealized_profit_does_not_count_as_achieved_daily_target():
+def test_net_equity_profit_counts_towards_achieved_daily_target():
     portfolio = PortfolioState(balance=5000, equity=5060, daily_pnl=60,
                                unrealized_pnl=60, daily_realized_pnl=0)
-    assert RiskEngine().evaluate_signal(signal(), portfolio).approved
+    # Net profit is $60 >= $50 target, so new entries are locked
+    assert not RiskEngine().evaluate_signal(signal(), portfolio).approved
 
 
-def test_realized_target_blocks_entries_even_when_open_positions_lose():
+def test_open_position_loss_prevents_premature_daily_target_lock():
     portfolio = PortfolioState(balance=5050, equity=5040, daily_pnl=40,
                                unrealized_pnl=-10, daily_realized_pnl=50)
-    assert not RiskEngine().evaluate_signal(signal(), portfolio).approved
+    # Net profit is $40 < $50 target despite $50 realized, so entries are not locked prematurely
+    assert RiskEngine().evaluate_signal(signal(), portfolio).approved
 
 
 def test_new_position_respects_remaining_daily_loss_budget():

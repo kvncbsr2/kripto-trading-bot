@@ -104,16 +104,28 @@ class SignalModel(Base, TimestampMixin):
     __tablename__ = "signals"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    signal_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     symbol: Mapped[str] = mapped_column(String(20), nullable=False)
     strategy: Mapped[str] = mapped_column(String(50), nullable=False)
+    strategy_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    risk_profile_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    signal_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    opportunity_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     direction: Mapped[str] = mapped_column(String(10), nullable=False)
+    approved: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    regime: Mapped[str] = mapped_column(String(30), nullable=False)
+    regime_state: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     entry_price: Mapped[float] = mapped_column(Float, nullable=False)
     stop_price: Mapped[float] = mapped_column(Float, nullable=False)
     take_profit: Mapped[float] = mapped_column(Float, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
-    regime: Mapped[str] = mapped_column(String(30), nullable=False)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    outcome_realized_pnl: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    outcome_r_multiple: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    outcome_exit_reason: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    outcome_closed_at: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
 
 class OrderModel(Base, TimestampMixin):
@@ -143,6 +155,10 @@ class FillModel(Base, TimestampMixin):
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     fee: Mapped[float] = mapped_column(Float, nullable=False)
     slippage: Mapped[float] = mapped_column(Float, nullable=False)
+    configured_slippage_bps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    effective_slippage_bps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tick_rounding_impact_bps: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    legacy_precision_affected: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -163,6 +179,14 @@ class PositionModel(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), default="OPEN", nullable=False)
     strategy: Mapped[str] = mapped_column(String(50), nullable=False)
     closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    signal_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    entry_context: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    entry_arm: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    r_multiple: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    price_stale: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
+    price_fetch_failures: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
+    last_price_update_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
 
 
 class PortfolioSnapshotModel(Base, TimestampMixin):

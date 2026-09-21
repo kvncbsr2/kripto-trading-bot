@@ -114,16 +114,31 @@ async def get_bull_bear_debate(symbol: str = Query("BTC/USDT", description="Trad
 
 
 @router.get("/api/v1/analytics/reflections")
-async def get_trade_reflections(limit: int = Query(10, ge=1, le=50)) -> Dict[str, Any]:
+async def get_trade_reflections(limit: int = Query(20, ge=1, le=100)) -> Dict[str, Any]:
     """
-    Returns the recent episodic trade reflection records and lessons learned.
+    Returns the recent episodic trade reflection records, lessons learned, and adaptive state.
     """
+    from services.strategy_engine.adaptive_learning import adaptive_learning_engine
     reflections = trade_reflection_engine.get_recent_reflections(limit=limit)
     return {
         "status": "success",
         "total_records": len(reflections),
         "reflections": reflections,
+        "adaptive_summary": adaptive_learning_engine.get_summary(),
     }
+
+
+@router.get("/api/v1/analytics/adaptive-parameters")
+async def get_adaptive_parameters() -> Dict[str, Any]:
+    """
+    Returns the active dynamic parameters, symbol cooldowns, and learning metrics.
+    """
+    from services.strategy_engine.adaptive_learning import adaptive_learning_engine
+    return {
+        "status": "success",
+        "adaptive_state": adaptive_learning_engine.get_summary(),
+    }
+
 
 
 @router.get("/api/v1/agents/judge")

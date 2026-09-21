@@ -593,9 +593,9 @@ export default function UltraSimpleDashboard() {
                           {p.symbol.split('/')[0]}
                         </div>
                         <div>
-                          <div className="font-bold text-sm text-white">{p.symbol}</div>
+                          <div className="text-bold text-sm text-white">{p.symbol}</div>
                           <div className="text-xs text-slate-400 font-mono">
-                            Alış Fiyatı: ${p.entry_price} • Şimdiki Fiyat: ${p.current_price}
+                            Alış Fiyatı: ${p.entry_price} • Şimdiki: ${p.current_price} • Komisyon: <span className="text-amber-400 font-medium">${Number(p.fees_paid || 0).toFixed(2)}</span>
                           </div>
                         </div>
                       </div>

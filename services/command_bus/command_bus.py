@@ -1,3 +1,6 @@
+import asyncio
+import concurrent.futures
+import inspect
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -172,9 +175,21 @@ class CommandBus:
             )
             return res
 
-        closed_pos = self.broker.close_position(
+        raw_res = self.broker.close_position(
             symbol=symbol, exit_price=pos.current_price, reason=reason
         )
+        if inspect.isawaitable(raw_res):
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop and loop.is_running():
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    closed_pos = pool.submit(asyncio.run, raw_res).result()
+            else:
+                closed_pos = asyncio.run(raw_res)
+        else:
+            closed_pos = raw_res
         if not closed_pos:
             res = {"success": False, "message": f"Failed to close position for symbol {symbol}."}
             self._log_audit(

@@ -109,14 +109,14 @@ class WhaleRadarTracker:
 
         symbol_summary = []
         for sym, stats in symbol_stats.items():
-            b = stats["buy_usd"]
-            s = stats["sell_usd"]
-            net = b - s
-            tot = b + s
+            b_usd = float(stats["buy_usd"])
+            s_usd = float(stats["sell_usd"])
+            net = b_usd - s_usd
+            tot = b_usd + s_usd
             symbol_summary.append({
                 "symbol": sym,
-                "buy_usd": round(b, 2),
-                "sell_usd": round(s, 2),
+                "buy_usd": round(b_usd, 2),
+                "sell_usd": round(s_usd, 2),
                 "net_usd": round(net, 2),
                 "total_usd": round(tot, 2),
                 "count": stats["count"],

@@ -1,4 +1,5 @@
-from typing import List, Optional
+from datetime import datetime, timezone
+from typing import Any, List, Optional
 
 import pandas as pd
 
@@ -44,10 +45,10 @@ class FeatureEngine:
 
 
     @classmethod
-    def compute_features(cls, candles: List[Candle]) -> pd.DataFrame:
-        df = cls.candles_to_dataframe(candles)
-        if len(df) < 5:
-            return df
+    def compute_features_df(cls, df: pd.DataFrame) -> pd.DataFrame:
+        if df is None or df.empty or len(df) < 5:
+            return df if df is not None else pd.DataFrame()
+        df = df.copy()
 
         # Trend
         df["ema_20"] = calculate_ema(df["close"], 20)
@@ -75,11 +76,65 @@ class FeatureEngine:
         df["realized_vol"] = calculate_realized_volatility(df["close"], 20)
 
         # Volume
-        df["volume_sma"] = calculate_volume_sma(df["volume"], 20)
-        df["volume_ratio"] = calculate_volume_ratio(df["volume"], 20)
-        df["vwap"] = calculate_vwap(df["high"], df["low"], df["close"], df["volume"])
+        if "volume" in df.columns:
+            df["volume_sma"] = calculate_volume_sma(df["volume"], 20)
+            df["volume_ratio"] = calculate_volume_ratio(df["volume"], 20)
+            df["vwap"] = calculate_vwap(df["high"], df["low"], df["close"], df["volume"])
 
         return df
+
+    @classmethod
+    def compute_features(cls, candles: List[Candle]) -> pd.DataFrame:
+        df = cls.candles_to_dataframe(candles)
+        return cls.compute_features_df(df)
+
+    @classmethod
+    def get_feature_vector_from_dataframe(
+        cls,
+        df: pd.DataFrame,
+        symbol: str,
+        timeframe: Any = Timeframe.M15,
+    ) -> Optional[FeatureVector]:
+        if df is None or df.empty or len(df) < 5:
+            return None
+
+        feat_df = cls.compute_features_df(df)
+        if feat_df.empty or len(feat_df) < 5:
+            return None
+
+        last_row = feat_df.iloc[-1]
+        indicators = {
+            col: float(last_row[col])
+            for col in feat_df.columns
+            if col not in ["timestamp"] and not pd.isna(last_row[col])
+        }
+
+        # Market structure
+        struct = analyze_market_structure(feat_df["high"], feat_df["low"], feat_df["close"])
+        for k, v in struct.items():
+            indicators[k] = 1.0 if v else 0.0
+
+        # RSI Divergence detection
+        if len(feat_df) >= 20 and "rsi" in feat_df.columns:
+            div = RSIDivergenceDetector.detect_divergence(
+                feat_df["low"], feat_df["high"], feat_df["close"], feat_df["rsi"]
+            )
+            indicators["bullish_divergence"] = 1.0 if div["bullish_divergence"] else 0.0
+            indicators["bearish_divergence"] = 1.0 if div["bearish_divergence"] else 0.0
+            indicators["divergence_score"] = float(div["divergence_score"])
+
+        ts = last_row.get("timestamp")
+        if ts is None or (isinstance(ts, float) and pd.isna(ts)):
+            ts = datetime.now(timezone.utc)
+
+        tf = timeframe if isinstance(timeframe, Timeframe) else Timeframe.M15
+
+        return FeatureVector(
+            symbol=symbol,
+            timeframe=tf,
+            timestamp=ts,
+            indicators=indicators,
+        )
 
     @classmethod
     def get_latest_feature_vector(
@@ -88,34 +143,5 @@ class FeatureEngine:
         symbol: str,
         timeframe: Timeframe,
     ) -> Optional[FeatureVector]:
-        df = cls.compute_features(candles)
-        if df.empty or len(df) < 5:
-            return None
-
-        last_row = df.iloc[-1]
-        indicators = {
-            col: float(last_row[col])
-            for col in df.columns
-            if col not in ["timestamp"] and not pd.isna(last_row[col])
-        }
-
-        # Market structure
-        struct = analyze_market_structure(df["high"], df["low"], df["close"])
-        for k, v in struct.items():
-            indicators[k] = 1.0 if v else 0.0
-
-        # RSI Divergence detection
-        if len(df) >= 20 and "rsi" in df.columns:
-            div = RSIDivergenceDetector.detect_divergence(
-                df["low"], df["high"], df["close"], df["rsi"]
-            )
-            indicators["bullish_divergence"] = 1.0 if div["bullish_divergence"] else 0.0
-            indicators["bearish_divergence"] = 1.0 if div["bearish_divergence"] else 0.0
-            indicators["divergence_score"] = float(div["divergence_score"])
-
-        return FeatureVector(
-            symbol=symbol,
-            timeframe=timeframe,
-            timestamp=last_row["timestamp"],
-            indicators=indicators,
-        )
+        df = cls.candles_to_dataframe(candles)
+        return cls.get_feature_vector_from_dataframe(df, symbol=symbol, timeframe=timeframe)

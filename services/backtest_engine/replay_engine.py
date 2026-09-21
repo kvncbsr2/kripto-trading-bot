@@ -1,13 +1,16 @@
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 import pandas as pd
 
 from services.backtest_engine.anti_lookahead import AntiLookaheadEngine
 from services.strategy_discovery.overfitting_engine import (
     OverfittingProtectionEngine,
 )
+from services.strategy_engine.strategies.base_strategy import BaseStrategy
 from services.strategy_engine.strategies.r10_rsi_divergence import R10RSIDivergenceStrategy
 from shared.config import get_settings
 from shared.enums import SignalDirection
@@ -56,6 +59,8 @@ class R10ReplayValidationReport:
     profit_factor: float = 0.0
     expectancy: float = 0.0
     max_drawdown_pct: float = 0.0
+    sharpe_ratio: float = 0.0
+    sortino_ratio: float = 0.0
     oos_status: str = "PASS"
     walk_forward_status: str = "PASS"
     monte_carlo_status: str = "PASS"
@@ -77,7 +82,7 @@ class CausalHistoricalReplayEngine:
 
     def __init__(
         self,
-        strategy: Optional[R10RSIDivergenceStrategy] = None,
+        strategy: Optional[BaseStrategy] = None,
         initial_capital: Optional[float] = None,
         fee_rate: Optional[float] = None,
         slippage_bps: Optional[float] = None,
@@ -96,12 +101,12 @@ class CausalHistoricalReplayEngine:
         symbol: str = "BTC/USDT",
     ) -> R10ReplayValidationReport:
         """
-        Executes bar-by-bar progression across daily candles without future lookahead.
+        Executes bar-by-bar progression across candles without future lookahead.
+        Includes Bug 1 (immediate entry-candle SL/TP and gap handling),
+        Bug 2 (end-of-series force close), and Bug 3 (drawdown from initial equity peak).
         """
         n_candles = len(df)
         equity = self.initial_capital
-        peak_equity = self.initial_capital
-        max_drawdown = 0.0
 
         trades: List[ReplayTrade] = []
         signals_log: List[Dict[str, Any]] = []
@@ -109,51 +114,58 @@ class CausalHistoricalReplayEngine:
 
         open_pos: Optional[Dict[str, Any]] = None
 
-        # Warm-up requirement: need enough bars for RSI(14) + left_bars(5) + right_bars(5)
-        min_warmup = 30
-        if n_candles < min_warmup + 10:
-            logger.warning(f"Insufficient candles for replay: {n_candles} < {min_warmup + 10}")
-
-        for current_bar in range(min_warmup, n_candles):
+        # Loop across all candles (each strategy handles its own indicator warmup requirement)
+        for current_bar in range(0, n_candles):
             current_slice = df.iloc[: current_bar + 1].copy()
             candle = current_slice.iloc[-1]
-            c_time = pd.to_datetime(candle["timestamp"]).to_pydatetime()
+            ts_val = candle["timestamp"] if "timestamp" in candle else candle.name
+            c_time = pd.to_datetime(ts_val).to_pydatetime()
+            c_open = float(candle["open"])
             c_high = float(candle["high"])
             c_low = float(candle["low"])
+            c_close = float(candle["close"])
 
-            # 1. Manage Active Position (Check for SL or TP breach on current candle)
+            # 1. Manage Active Position (Check for SL or TP breach or End-of-Series on current candle)
             if open_pos is not None:
                 pos_dir = open_pos["direction"]
                 sl = open_pos["stop_loss"]
                 tp = open_pos["take_profit"]
                 entry_px = open_pos["entry_price"]
                 size = open_pos["size"]
+                is_long = pos_dir == SignalDirection.LONG or (hasattr(pos_dir, "value") and pos_dir.value == "LONG") or str(pos_dir).upper() == "LONG"
 
                 closed = False
                 exit_price = 0.0
                 exit_reason = ""
 
-                if pos_dir == SignalDirection.LONG:
+                # Fix Bug 1: Evaluate bar current_bar immediately for SL/TP hits with realistic gap handling
+                if is_long:
                     if c_low <= sl:
-                        exit_price = sl * (1.0 - self.slippage_rate)
+                        exit_price = min(c_open, sl) * (1.0 - self.slippage_rate)
                         exit_reason = "STOP_LOSS"
                         closed = True
                     elif c_high >= tp:
-                        exit_price = tp * (1.0 - self.slippage_rate)
+                        exit_price = max(c_open, tp) * (1.0 - self.slippage_rate)
                         exit_reason = "TAKE_PROFIT"
                         closed = True
                 else:  # SHORT
                     if c_high >= sl:
-                        exit_price = sl * (1.0 + self.slippage_rate)
+                        exit_price = max(c_open, sl) * (1.0 + self.slippage_rate)
                         exit_reason = "STOP_LOSS"
                         closed = True
                     elif c_low <= tp:
-                        exit_price = tp * (1.0 + self.slippage_rate)
+                        exit_price = min(c_open, tp) * (1.0 + self.slippage_rate)
                         exit_reason = "TAKE_PROFIT"
                         closed = True
 
+                # Fix Bug 2: End of data force close MUST execute on the last candle if trade remains open
+                if not closed and current_bar == n_candles - 1:
+                    exit_price = c_close * (1.0 - self.slippage_rate if is_long else 1.0 + self.slippage_rate)
+                    exit_reason = "END_OF_SERIES"
+                    closed = True
+
                 if closed:
-                    gross_pnl = (exit_price - entry_px) * size if pos_dir == SignalDirection.LONG else (entry_px - exit_price) * size
+                    gross_pnl = (exit_price - entry_px) * size if is_long else (entry_px - exit_price) * size
                     fee_open = entry_px * size * self.fee_rate
                     fee_close = exit_price * size * self.fee_rate
                     tot_fee = fee_open + fee_close
@@ -161,15 +173,13 @@ class CausalHistoricalReplayEngine:
                     net_pnl = gross_pnl - tot_fee
 
                     equity += net_pnl
-                    peak_equity = max(peak_equity, equity)
-                    dd = (peak_equity - equity) / peak_equity * 100.0
-                    max_drawdown = max(max_drawdown, dd)
+                    dir_str = pos_dir.value if hasattr(pos_dir, "value") else str(pos_dir)
 
                     trades.append(
                         ReplayTrade(
                             trade_id=open_pos["trade_id"],
                             symbol=symbol,
-                            direction=pos_dir.value,
+                            direction=dir_str,
                             entry_bar=open_pos["entry_bar"],
                             entry_time=open_pos["entry_time"],
                             entry_price=round(entry_px, 2),
@@ -207,10 +217,11 @@ class CausalHistoricalReplayEngine:
                         details={"confirmation_time": conf_time_str},
                     )
 
+                    sig_dir_val = signal.direction.value if hasattr(signal.direction, "value") else str(signal.direction)
                     signals_log.append({
                         "bar": current_bar,
                         "time": c_time.strftime("%Y-%m-%d"),
-                        "direction": signal.direction.value,
+                        "direction": sig_dir_val,
                         "data_available_at": c_time.strftime("%Y-%m-%d 23:59:59 UTC"),
                         "signal_generated_at": c_time.strftime("%Y-%m-%d 23:59:59 UTC"),
                         "pivot_confirmed_delay": "T+5 bars",
@@ -223,18 +234,22 @@ class CausalHistoricalReplayEngine:
                     # Open position on NEXT bar (simulated next open)
                     next_candle = df.iloc[current_bar + 1]
                     next_open = float(next_candle["open"])
-                    applied_entry = next_open * (1.0 + self.slippage_rate if signal.direction == SignalDirection.LONG else 1.0 - self.slippage_rate)
+                    is_signal_long = signal.direction == SignalDirection.LONG or sig_dir_val == "LONG"
+                    applied_entry = next_open * (1.0 + self.slippage_rate if is_signal_long else 1.0 - self.slippage_rate)
 
                     risk_amount = equity * 0.005  # 0.5% risk
                     stop_dist = abs(applied_entry - signal.stop_price)
                     size = (risk_amount / stop_dist) if stop_dist > 0 else (equity * 0.1 / applied_entry)
+
+                    next_ts = next_candle["timestamp"] if "timestamp" in next_candle else next_candle.name
+                    next_time_str = pd.to_datetime(next_ts).strftime("%Y-%m-%d")
 
                     trade_counter += 1
                     open_pos = {
                         "trade_id": trade_counter,
                         "direction": signal.direction,
                         "entry_bar": current_bar + 1,
-                        "entry_time": pd.to_datetime(next_candle["timestamp"]).strftime("%Y-%m-%d"),
+                        "entry_time": next_time_str,
                         "entry_price": applied_entry,
                         "stop_loss": signal.stop_price,
                         "take_profit": signal.take_profit,
@@ -244,17 +259,82 @@ class CausalHistoricalReplayEngine:
                         "signal_generated_at": c_time.strftime("%Y-%m-%d (T+5)"),
                     }
 
-        # 3. Calculate Performance Metrics
+        # Fix Bug 2 Safeguard: If open_pos remains open after loop, force close at series end
+        if open_pos is not None:
+            last_candle = df.iloc[-1]
+            last_close = float(last_candle["close"])
+            last_ts = last_candle["timestamp"] if "timestamp" in last_candle else last_candle.name
+            last_time = pd.to_datetime(last_ts).to_pydatetime()
+            pos_dir = open_pos["direction"]
+            entry_px = open_pos["entry_price"]
+            size = open_pos["size"]
+            is_long = pos_dir == SignalDirection.LONG or (hasattr(pos_dir, "value") and pos_dir.value == "LONG") or str(pos_dir).upper() == "LONG"
+
+            exit_price = last_close * (1.0 - self.slippage_rate if is_long else 1.0 + self.slippage_rate)
+            gross_pnl = (exit_price - entry_px) * size if is_long else (entry_px - exit_price) * size
+            fee_open = entry_px * size * self.fee_rate
+            fee_close = exit_price * size * self.fee_rate
+            tot_fee = fee_open + fee_close
+            tot_slip = (entry_px + exit_price) * size * self.slippage_rate
+            net_pnl = gross_pnl - tot_fee
+            equity += net_pnl
+            dir_str = pos_dir.value if hasattr(pos_dir, "value") else str(pos_dir)
+
+            trades.append(
+                ReplayTrade(
+                    trade_id=open_pos["trade_id"],
+                    symbol=symbol,
+                    direction=dir_str,
+                    entry_bar=open_pos["entry_bar"],
+                    entry_time=open_pos["entry_time"],
+                    entry_price=round(entry_px, 2),
+                    exit_bar=n_candles - 1,
+                    exit_time=last_time.strftime("%Y-%m-%d"),
+                    exit_price=round(exit_price, 2),
+                    pnl=round(gross_pnl, 2),
+                    fees=round(tot_fee, 2),
+                    slippage=round(tot_slip, 2),
+                    net_pnl=round(net_pnl, 2),
+                    exit_reason="END_OF_SERIES",
+                    signal_score=open_pos["signal_score"],
+                    data_available_at=open_pos["data_available_at"],
+                    signal_generated_at=open_pos["signal_generated_at"],
+                )
+            )
+            open_pos = None
+
+        # 3. Calculate Performance Metrics with Bug 3 Fix (Drawdown from initial capital peak)
         wins = [t for t in trades if t.net_pnl > 0]
         losses = [t for t in trades if t.net_pnl <= 0]
         tot_wins_pnl = sum(t.net_pnl for t in wins)
         tot_loss_pnl = abs(sum(t.net_pnl for t in losses))
-        profit_factor = (tot_wins_pnl / tot_loss_pnl) if tot_loss_pnl > 0 else (99.0 if tot_wins_pnl > 0 else 0.0)
+        profit_factor = (tot_wins_pnl / tot_loss_pnl) if tot_loss_pnl > 1e-6 else (99.0 if tot_wins_pnl > 0 else 0.0)
         win_rate = (len(wins) / max(1, len(trades))) * 100.0
         net_pnl = equity - self.initial_capital
         expectancy = (net_pnl / max(1, len(trades)))
         tot_fees = sum(t.fees for t in trades)
         tot_slip = sum(t.slippage for t in trades)
+
+        # Fix Bug 3: Compute Max Drawdown starting strictly from initial peak capital
+        if len(trades) > 0:
+            trade_returns = np.array([t.net_pnl / self.initial_capital for t in trades])
+            equity_curve = np.cumsum(trade_returns) + 1.0
+            full_equity = np.insert(equity_curve, 0, 1.0)
+            peaks = np.maximum.accumulate(full_equity)
+            drawdowns = (peaks - full_equity) / peaks
+            max_drawdown = float(np.max(drawdowns)) * 100.0 if len(drawdowns) > 0 else 0.0
+
+            mean_r = float(np.mean(trade_returns))
+            std_r = float(np.std(trade_returns, ddof=1)) if len(trade_returns) > 1 else 1e-6
+            downside = trade_returns[trade_returns < 0]
+            downside_std = float(np.std(downside, ddof=1)) if len(downside) > 1 else 1e-6
+            annual_factor = math.sqrt(252)
+            sharpe = round((mean_r / (std_r + 1e-8)) * annual_factor if std_r > 0 else 0.0, 2)
+            sortino = round((mean_r / (downside_std + 1e-8)) * annual_factor if downside_std > 0 else 0.0, 2)
+        else:
+            max_drawdown = 0.0
+            sharpe = 0.0
+            sortino = 0.0
 
         # 4. Anti-Lookahead Audit
         audit_res = self.anti_lookahead.run_audit()
@@ -299,6 +379,8 @@ class CausalHistoricalReplayEngine:
             profit_factor=round(min(99.0, profit_factor), 2),
             expectancy=round(expectancy, 2),
             max_drawdown_pct=round(max_drawdown, 2),
+            sharpe_ratio=sharpe,
+            sortino_ratio=sortino,
             oos_status="PASS" if profit_factor >= 1.10 else "FAIL",
             walk_forward_status="PASS" if robustness_report.walk_forward_stability >= 0.70 else "FAIL",
             monte_carlo_status="PASS" if max_drawdown <= 15.0 else "FAIL",

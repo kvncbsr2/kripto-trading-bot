@@ -1,7 +1,7 @@
 {
   "active_risk_profile_level": 1,
-  "active_strategy_id": "r10_rsi_divergence",
-  "updated_at": "2026-09-09T23:59:03.290146+00:00",
+  "active_strategy_id": "momentum_dip_rebound",
+  "updated_at": "2026-09-21T15:43:11.018135+00:00",
   "version": "2.0.0",
-  "source": "api"
+  "source": "bandit_contextual"
 }

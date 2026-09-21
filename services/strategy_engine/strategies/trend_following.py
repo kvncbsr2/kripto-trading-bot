@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 from services.strategy_engine.strategies.base_strategy import BaseStrategy
 from shared.enums import MarketRegime, SignalDirection
@@ -100,3 +100,15 @@ class TrendFollowingStrategy(BaseStrategy):
             )
 
         return None
+
+    def evaluate_from_dataframe(
+        self,
+        df: Any,
+        symbol: str,
+    ) -> Optional[Signal]:
+        """
+        Direct DataFrame evaluation adapter for TrendFollowingStrategy.
+        Converts DataFrame candles into FeatureVector & MarketRegimeState and calls evaluate().
+        """
+        return super().evaluate_from_dataframe(df, symbol=symbol)
+

@@ -60,6 +60,8 @@ class R10RSIDivergenceStrategy(BaseStrategy):
         min_signal_score: float = 70.0,
         timeframe: str = "1d",
         confirmation_enabled: bool = True,
+        max_entry_risk_pct: Optional[float] = None,
+        max_bars_after_confirmation: int = 3,
         enabled: bool = True,
     ):
         super().__init__(name=name, enabled=enabled)
@@ -79,6 +81,8 @@ class R10RSIDivergenceStrategy(BaseStrategy):
         # in the ~55-65% range from the <40% range for unconfirmed divergence alone. This
         # wires the flag to an actual EMA-reclaim confirmation check below.
         self.confirmation_enabled = confirmation_enabled
+        self.max_entry_risk_pct = max_entry_risk_pct
+        self.max_bars_after_confirmation = max_bars_after_confirmation
 
     @staticmethod
     def calculate_signal_score_from_divergence(div_score: float) -> float:
@@ -227,18 +231,53 @@ class R10RSIDivergenceStrategy(BaseStrategy):
             else None
         )
 
+        cand_p_start = max(self.left_bars, current_idx - self.right_bars - self.max_bars_after_confirmation)
+        cand_p_end = current_idx - self.right_bars
+        if cand_p_end < self.left_bars:
+            return None
+
+        lows = df["low"].values
+        highs = df["high"].values
+        rsis = df["rsi"].values
+
+        # Fast O(1) Pivot Check: A confirmation within the confirmation window requires at least one
+        # candidate bar in [cand_p_start, cand_p_end] to be an extrema in its window.
+        has_cand = False
+        for cp in range(cand_p_start, cand_p_end + 1):
+            low_win = lows[cp - self.left_bars : cp + self.right_bars + 1]
+            high_win = highs[cp - self.left_bars : cp + self.right_bars + 1]
+            if (lows[cp] == np.min(low_win) and lows[cp] < np.mean(low_win)) or \
+               (highs[cp] == np.max(high_win) and highs[cp] > np.mean(high_win)):
+                has_cand = True
+                break
+        if not has_cand:
+            return None
+
         low_pivots, high_pivots = self.detect_pivots_strictly_causal(df, current_idx)
 
         # Check for Regular Bullish Divergence (Long)
-        # Needs at least 2 confirmed low pivots, with the latest low pivot confirmed at current_idx
+        # Needs at least 2 confirmed low pivots, with the latest low pivot confirmed within max_bars_after_confirmation
         if len(low_pivots) >= 2:
             p2 = low_pivots[-1]
             p1 = low_pivots[-2]
 
-            # The pivot p2 must have just been confirmed at current_idx
-            if p2.confirmation_index == current_idx:
+            bars_ago = current_idx - p2.confirmation_index
+            if 0 <= bars_ago <= self.max_bars_after_confirmation:
                 # Regular Bullish: Price Lower Low, RSI Higher Low
                 if p2.price < p1.price and p2.rsi > p1.rsi and p2.rsi < 50.0:
+                    # Invalidation: current price must not have broken down below the swing low
+                    if current_price < p2.price:
+                        return None
+                    # Intermediate bar reset check:
+                    # 1. No bar between P1 and current_idx should have low < p2.price
+                    # 2. RSI should not have reset to overbought (>= 65.0)
+                    inter_lows = lows[p1.index + 1 : current_idx + 1]
+                    inter_rsis = rsis[p1.index + 1 : current_idx + 1]
+                    if len(inter_lows) > 0:
+                        if np.any(inter_lows < p2.price) or np.any(inter_rsis >= 65.0):
+                            logger.info("R10 Bullish Divergence canceled: Intermediate bar lower low or RSI >= 65 reset.")
+                            return None
+
                     quality = self.calculate_divergence_quality(
                         p1, p2, current_atr, is_bullish=True
                     )
@@ -252,6 +291,15 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                         )
                         stop_loss = _format_price_precision(p2.price - (current_atr * self.atr_multiplier))
                         risk_dist = current_price - stop_loss
+
+                        # Max entry risk barrier check ((Close - SL) / Close > max_entry_risk_pct)
+                        entry_risk_ratio = (risk_dist / current_price) if current_price > 0 else 1.0
+                        if self.max_entry_risk_pct is not None and entry_risk_ratio > self.max_entry_risk_pct:
+                            logger.info(
+                                f"R10 Bullish Divergence rejected: Entry risk {entry_risk_ratio:.2%} exceeds max {self.max_entry_risk_pct:.2%}"
+                            )
+                            return None
+
                         if bullish_confirmed and risk_dist > 0:
                             take_profit = _format_price_precision(
                                 current_price + (risk_dist * self.risk_reward_ratio)
@@ -273,6 +321,7 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                                     "pivot_1_time": p1.timestamp.isoformat(),
                                     "pivot_2_time": p2.timestamp.isoformat(),
                                     "confirmation_time": p2.confirmation_time.isoformat(),
+                                    "bars_since_confirmation": bars_ago,
                                     "divergence_quality": quality,
                                     "signal_score": signal_score,
                                     "is_real_time_safe": True,
@@ -285,9 +334,23 @@ class R10RSIDivergenceStrategy(BaseStrategy):
             p2 = high_pivots[-1]
             p1 = high_pivots[-2]
 
-            if p2.confirmation_index == current_idx:
+            bars_ago = current_idx - p2.confirmation_index
+            if 0 <= bars_ago <= self.max_bars_after_confirmation:
                 # Regular Bearish: Price Higher High, RSI Lower High
                 if p2.price > p1.price and p2.rsi < p1.rsi and p2.rsi > 50.0:
+                    # Invalidation: current price must not have broken above the swing high
+                    if current_price > p2.price:
+                        return None
+                    # Intermediate bar reset check:
+                    # 1. No bar between P1 and current_idx should have high > p2.price
+                    # 2. RSI should not have reset to oversold (<= 35.0)
+                    inter_highs = highs[p1.index + 1 : current_idx + 1]
+                    inter_rsis = rsis[p1.index + 1 : current_idx + 1]
+                    if len(inter_highs) > 0:
+                        if np.any(inter_highs > p2.price) or np.any(inter_rsis <= 35.0):
+                            logger.info("R10 Bearish Divergence canceled: Intermediate bar higher high or RSI <= 35 reset.")
+                            return None
+
                     quality = self.calculate_divergence_quality(
                         p1, p2, current_atr, is_bullish=False
                     )
@@ -299,6 +362,15 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                         )
                         stop_loss = _format_price_precision(p2.price + (current_atr * self.atr_multiplier))
                         risk_dist = stop_loss - current_price
+
+                        # Max entry risk barrier check ((SL - Close) / Close > max_entry_risk_pct)
+                        entry_risk_ratio = (risk_dist / current_price) if current_price > 0 else 1.0
+                        if self.max_entry_risk_pct is not None and entry_risk_ratio > self.max_entry_risk_pct:
+                            logger.info(
+                                f"R10 Bearish Divergence rejected: Entry risk {entry_risk_ratio:.2%} exceeds max {self.max_entry_risk_pct:.2%}"
+                            )
+                            return None
+
                         if bearish_confirmed and risk_dist > 0:
                             take_profit = _format_price_precision(
                                 current_price - (risk_dist * self.risk_reward_ratio)
@@ -320,6 +392,7 @@ class R10RSIDivergenceStrategy(BaseStrategy):
                                     "pivot_1_time": p1.timestamp.isoformat(),
                                     "pivot_2_time": p2.timestamp.isoformat(),
                                     "confirmation_time": p2.confirmation_time.isoformat(),
+                                    "bars_since_confirmation": bars_ago,
                                     "divergence_quality": quality,
                                     "signal_score": signal_score,
                                     "is_real_time_safe": True,
@@ -369,8 +442,15 @@ class R10RSIDivergenceStrategy(BaseStrategy):
             return None
 
         if is_bull_div:
-            stop_loss = _format_price_precision(close - (atr * self.atr_multiplier))
-            take_profit = _format_price_precision(close + ((close - stop_loss) * self.risk_reward_ratio))
+            swing_low = ind.get("pivot_2_price") or ind.get("swing_low") or (metadata.get("pivot_2_price") if metadata else None) or (metadata.get("p2_price") if metadata else None) or close
+            stop_loss = _format_price_precision(swing_low - (atr * self.atr_multiplier))
+            risk_dist = close - stop_loss
+            if risk_dist <= 0:
+                return None
+            entry_risk_ratio = risk_dist / close if close > 0 else 1.0
+            if self.max_entry_risk_pct is not None and entry_risk_ratio > self.max_entry_risk_pct:
+                return None
+            take_profit = _format_price_precision(close + (risk_dist * self.risk_reward_ratio))
             return Signal(
                 symbol=features.symbol,
                 timestamp=features.timestamp,
@@ -390,8 +470,15 @@ class R10RSIDivergenceStrategy(BaseStrategy):
             )
 
         if is_bear_div:
-            stop_loss = _format_price_precision(close + (atr * self.atr_multiplier))
-            take_profit = _format_price_precision(close - ((stop_loss - close) * self.risk_reward_ratio))
+            swing_high = ind.get("pivot_2_price") or ind.get("swing_high") or (metadata.get("pivot_2_price") if metadata else None) or (metadata.get("p2_price") if metadata else None) or close
+            stop_loss = _format_price_precision(swing_high + (atr * self.atr_multiplier))
+            risk_dist = stop_loss - close
+            if risk_dist <= 0:
+                return None
+            entry_risk_ratio = risk_dist / close if close > 0 else 1.0
+            if self.max_entry_risk_pct is not None and entry_risk_ratio > self.max_entry_risk_pct:
+                return None
+            take_profit = _format_price_precision(close - (risk_dist * self.risk_reward_ratio))
             return Signal(
                 symbol=features.symbol,
                 timestamp=features.timestamp,
@@ -426,5 +513,7 @@ def create_r10_strategy_from_settings(settings: Optional[object] = None) -> R10R
         min_signal_score=settings.MIN_SIGNAL_SCORE,
         timeframe=settings.R10_TIMEFRAME,
         confirmation_enabled=getattr(settings, "R10_CONFIRMATION_ENABLED", True),
+        max_entry_risk_pct=getattr(settings, "R10_MAX_ENTRY_RISK_PCT", 0.04),
+        max_bars_after_confirmation=getattr(settings, "R10_MAX_BARS_AFTER_CONFIRMATION", 3),
         enabled=settings.R10_ENABLED,
     )

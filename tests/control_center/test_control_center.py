@@ -9,15 +9,29 @@ settings = get_settings()
 
 @pytest.fixture
 async def client():
-    from apps.api.app.api.state import RUNTIME_STATE
+    from apps.api.app.api.state import RUNTIME_STATE, autonomous_trader, command_bus
+    from shared.enums import TradingWorkerState
     RUNTIME_STATE["is_halted"] = False
+    RUNTIME_STATE["system_state"] = "READY"
+    if autonomous_trader.worker_state in (TradingWorkerState.EMERGENCY_STOP, TradingWorkerState.ERROR):
+        autonomous_trader.reset_state()
+    autonomous_trader.stop()
+    saved_history = []
+    if command_bus.broker and hasattr(command_bus.broker, "closed_positions_history"):
+        saved_history = list(command_bus.broker.closed_positions_history)
+        command_bus.broker.closed_positions_history = []
+    from unittest.mock import patch
     transport = ASGITransport(app=app)
-    async with AsyncClient(
-        transport=transport,
-        base_url="http://test",
-        headers={"X-API-KEY": settings.API_ADMIN_KEY},
-    ) as ac:
-        yield ac
+    with patch.object(autonomous_trader, "_acquire_worker_lock", return_value="mock-token-test"), \
+         patch.object(autonomous_trader, "_release_worker_lock", return_value=None):
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={"X-API-KEY": settings.API_ADMIN_KEY},
+        ) as ac:
+            yield ac
+    if command_bus.broker and hasattr(command_bus.broker, "closed_positions_history"):
+        command_bus.broker.closed_positions_history = saved_history
 
 
 @pytest.mark.asyncio

@@ -1,3 +1,4 @@
+import inspect
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,10 +9,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.api.app.api.state import command_bus, market_data_service
+from apps.api.app.api.state import RUNTIME_STATE, command_bus, market_data_service
 from apps.api.app.middleware.auth import Role, verify_api_key_or_token
 from database.models.tables import PositionModel
 from database.session import get_async_db
+from services.paper_trading.canonical_accounting import PortfolioAccountingService
 from shared.logging import get_logger
 
 logger = get_logger("positions-router", service="api")
@@ -66,19 +68,23 @@ async def get_positions(status: str = "OPEN", response: Response = None, db: Asy
             "quantity": p.quantity,
             "stop_loss": p.stop_loss,
             "take_profit": p.take_profit,
+            "fees_paid": round(float(getattr(p, "fees_paid", 0.0) or (float(p.entry_price) * float(p.quantity) * 0.001)), 4),
             "unrealized_pnl": p.unrealized_pnl,
             "realized_pnl": p.realized_pnl,
             "status": p.status,
             "strategy": p.strategy,
             "opened_at": p.created_at.isoformat() if p.created_at else None,
             "closed_at": p.closed_at.isoformat() if p.closed_at else None,
+            "price_stale": getattr(p, "price_stale", False) or False,
+            "price_fetch_failures": getattr(p, "price_fetch_failures", 0) or 0,
+            "last_price_update_at": p.last_price_update_at.isoformat() if getattr(p, "last_price_update_at", None) else None,
         }
         for p in positions
     ]
 
     # Include in-memory paper broker open positions
     if command_bus.broker:
-        for symbol, p in command_bus.broker.open_positions.items():
+        for symbol, p in list(command_bus.broker.open_positions.items()):
             try:
                 ticker = await market_data_service.get_live_ticker(p.symbol)
                 if ticker and "price" in ticker and ticker["price"] > 0:
@@ -86,7 +92,11 @@ async def get_positions(status: str = "OPEN", response: Response = None, db: Asy
             except Exception:
                 pass
 
+            stale_symbols = set(RUNTIME_STATE.get("stale_price_symbols", []))
+            is_stale = (p.symbol in stale_symbols) or (getattr(p, "price_fetch_failures", 0) >= 5)
+            last_ts = getattr(p, "last_price_update_at", None)
             existing_idx = next((i for i, x in enumerate(pos_list) if x["position_id"] == p.position_id), None)
+            fee_val = getattr(p, "fees_paid", 0.0) or (float(p.entry_price) * float(p.quantity) * 0.001)
             pos_dict = {
                 "position_id": p.position_id,
                 "symbol": p.symbol,
@@ -96,12 +106,16 @@ async def get_positions(status: str = "OPEN", response: Response = None, db: Asy
                 "quantity": p.quantity,
                 "stop_loss": p.stop_loss,
                 "take_profit": p.take_profit,
+                "fees_paid": round(float(fee_val), 4),
                 "unrealized_pnl": round(p.unrealized_pnl, 2),
                 "realized_pnl": round(p.realized_pnl, 2),
                 "status": p.status.value if hasattr(p.status, "value") else str(p.status),
                 "strategy": p.strategy,
                 "opened_at": p.opened_at.isoformat() if hasattr(p.opened_at, "isoformat") else str(p.opened_at),
                 "closed_at": None,
+                "price_stale": is_stale,
+                "price_fetch_failures": getattr(p, "price_fetch_failures", 0),
+                "last_price_update_at": last_ts.isoformat() if hasattr(last_ts, "isoformat") else (str(last_ts) if last_ts else None),
             }
             if existing_idx is not None:
                 pos_list[existing_idx] = pos_dict
@@ -119,6 +133,9 @@ async def get_position_by_symbol(symbol: str):
     norm_symbol = symbol.replace("-", "/").upper()
     if command_bus.broker and norm_symbol in command_bus.broker.open_positions:
         p = command_bus.broker.open_positions[norm_symbol]
+        stale_symbols = set(RUNTIME_STATE.get("stale_price_symbols", []))
+        is_stale = (norm_symbol in stale_symbols) or (getattr(p, "price_fetch_failures", 0) >= 5)
+        last_ts = getattr(p, "last_price_update_at", None)
         return {
             "position_id": p.position_id,
             "symbol": p.symbol,
@@ -130,6 +147,9 @@ async def get_position_by_symbol(symbol: str):
             "take_profit": p.take_profit,
             "unrealized_pnl": p.unrealized_pnl,
             "status": p.status.value,
+            "price_stale": is_stale,
+            "price_fetch_failures": getattr(p, "price_fetch_failures", 0),
+            "last_price_update_at": last_ts.isoformat() if hasattr(last_ts, "isoformat") else (str(last_ts) if last_ts else None),
         }
     raise HTTPException(status_code=404, detail=f"No active position for {norm_symbol}")
 
@@ -153,7 +173,7 @@ async def post_close_position(
     # Find position by symbol or position_id
     target_pos = None
     target_symbol = None
-    for sym, pos in broker.open_positions.items():
+    for sym, pos in list(broker.open_positions.items()):
         if sym == norm_symbol or pos.position_id == identifier:
             target_pos = pos
             target_symbol = sym
@@ -168,6 +188,8 @@ async def post_close_position(
 
     reason = payload.reason if payload else "USER_MANUAL_CLOSE"
     closed = broker.close_position(symbol=target_symbol, exit_price=exit_price, reason=reason)
+    if inspect.isawaitable(closed):
+        closed = await closed
 
     if not closed:
         raise HTTPException(status_code=500, detail="Failed to close position.")
@@ -304,7 +326,11 @@ async def get_investor_report(response: Response = None):
         cur.execute("SELECT * FROM paper_account WHERE id=1")
         acc = cur.fetchone()
         if acc:
-            acc_balance = float(acc["balance"])
+            acc_dict = dict(acc)
+            acc_balance = float(acc_dict.get("balance") or initial_capital)
+            init_b = float(acc_dict.get("initial_balance") or 0.0)
+            if init_b > 0:
+                initial_capital = init_b
 
         cur.execute("SELECT * FROM paper_positions WHERE status='CLOSED' ORDER BY closed_at DESC")
         closed_rows = [dict(r) for r in cur.fetchall()]
@@ -404,18 +430,31 @@ async def get_investor_report(response: Response = None):
     win_loss_ratio = round(avg_win / avg_loss, 2) if avg_loss > 0 else 0.0
 
     from services.risk_engine.expectancy_engine import ExpectancyEngine
-    expectancy_data = ExpectancyEngine.calculate_from_positions(trade_ledger)
+    from apps.api.app.api.state import risk_engine
+    enforce_cb = not getattr(risk_engine, "circuit_breaker_suspended", False)
+    expectancy_data = ExpectancyEngine.calculate_from_positions(trade_ledger, enforce_circuit_breaker=enforce_cb)
+
+    canonical = PortfolioAccountingService.get_canonical_snapshot(broker, db_path=db_path_str)
+    strategy_attribution = PortfolioAccountingService.get_strategy_performance_attribution(db_path_str)
 
     return {
         "status": "SUCCESS",
+        "mode": "PAPER_TRADING",
+        "live_market_data": True,
+        "live_money_execution": False,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "price_stale": canonical.get("price_stale", False),
+        "stale_price_symbols": canonical.get("stale_price_symbols", []),
         "executive_summary": {
-            "initial_capital": round(initial_capital, 2),
-            "current_equity": round(current_equity, 2),
-            "current_balance": round(current_balance, 2),
-            "net_pnl_total": net_pnl_with_unrealized,
-            "net_realized_pnl": round(total_realized_pnl, 2),
-            "unrealized_pnl": round(unrealized_pnl, 2),
+            "initial_capital": canonical.get("initial_capital", round(initial_capital, 2)),
+            "current_equity": canonical.get("equity", round(current_equity, 2)),
+            "current_balance": canonical.get("balance", round(current_balance, 2)),
+            "net_pnl_total": canonical.get("lifetime_equity_change", net_pnl_with_unrealized),
+            "net_realized_pnl": canonical.get("lifetime_realized_net_pnl", round(total_realized_pnl, 2)),
+            "unrealized_pnl": canonical.get("unrealized_pnl", round(unrealized_pnl, 2)),
+            "daily_pnl": canonical.get("daily_total_pnl", 0.0),
+            "daily_realized_net_pnl": canonical.get("daily_realized_net_pnl", 0.0),
+            "daily_unrealized_pnl": canonical.get("daily_unrealized_pnl", 0.0),
             "net_roi_pct": net_roi_pct,
             "total_trades": len(trade_ledger),
             "winning_trades": len(wins),
@@ -427,12 +466,15 @@ async def get_investor_report(response: Response = None):
             "average_win": avg_win,
             "average_loss": avg_loss,
             "win_loss_ratio": win_loss_ratio,
-            "active_positions_count": len(open_rows),
+            "active_positions_count": len(canonical.get("open_positions", open_rows)),
+            "price_stale": canonical.get("price_stale", False),
+            "stale_price_symbols": canonical.get("stale_price_symbols", []),
         },
+        "strategy_performance_attribution": strategy_attribution,
         "mathematical_expectancy": expectancy_data,
         "fee_and_cost_transparency": {
-            "total_commissions_paid": total_commissions,
-            "total_slippage_cost": round(total_fill_slippage, 2),
+            "total_commissions_paid": canonical.get("total_fees_paid", total_commissions) or total_commissions,
+            "total_slippage_cost": canonical.get("total_slippage_cost", round(total_fill_slippage, 2)) or round(total_fill_slippage, 2),
             "total_turnover_volume_usd": round(total_trade_volume, 2),
             "effective_commission_rate_pct": round((total_commissions / total_trade_volume * 100.0), 3) if total_trade_volume > 0 else 0.0,
             "fee_drag_to_gross_profit_pct": round((total_commissions / gross_profit * 100.0), 1) if gross_profit > 0 else 0.0,
@@ -441,7 +483,7 @@ async def get_investor_report(response: Response = None):
             "slippage_bps": getattr(settings, "SLIPPAGE_BPS", 5.0),
         },
         "trade_ledger": trade_ledger,
-        "open_positions": [
+        "open_positions": canonical.get("open_positions", [
             {
                 "symbol": r.get("symbol"),
                 "side": r.get("side", "LONG"),
@@ -450,11 +492,16 @@ async def get_investor_report(response: Response = None):
                 "current_price": float(r.get("current_price") or 0.0),
                 "unrealized_pnl": round(float(r.get("unrealized_pnl") or 0.0), 2),
                 "opened_at": r.get("opened_at"),
+                "price_stale": (r.get("symbol") in set(RUNTIME_STATE.get("stale_price_symbols", []))),
+                "price_fetch_failures": int(r.get("price_fetch_failures") or 0),
+                "last_price_update_at": r.get("last_price_update_at"),
             }
             for r in open_rows
-        ],
+        ]),
         "system_parameters": {
             "execution_mode": "Paper Trading (0 Capital Risk - Internal Engine Logs)",
+            "live_market_data": True,
+            "live_money_execution": False,
             "data_source": "Binance Spot Live WebSockets & REST (Zero Fake Data)",
             "strategy": "R10 Causal RSI Divergence + Regime-Gated Pullback",
             "risk_controls": "Strict Fail-Closed RiskEngine (0.5% Risk / Max 5 Positions)",

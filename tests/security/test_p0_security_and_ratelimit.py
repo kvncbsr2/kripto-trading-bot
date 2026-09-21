@@ -28,10 +28,9 @@ async def test_dashboard_does_not_leak_raw_api_secret_and_uses_httponly_cookie()
         assert "window.__KRIPTO_API_KEY__" not in res.text
         assert settings.API_ADMIN_KEY not in res.text
 
-        # Verify cookie is httpOnly
+        # Verify unauthorized admin cookie is not distributed on unauthenticated request
         cookie_header = res.headers.get("set-cookie", "")
-        assert "kripto_admin_token=" in cookie_header
-        assert "httponly" in cookie_header.lower()
+        assert "kripto_admin_token=" not in cookie_header
 
 
 @pytest.mark.asyncio

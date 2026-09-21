@@ -67,3 +67,44 @@ def test_paper_execution_spot_short_rejection():
     )
     with pytest.raises(ValueError, match="Spot mode does not support SHORT"):
         engine.execute_market_order(short_decision)
+
+
+def test_persisted_sqlite_paper_account_matches_ledger_invariants():
+    """
+    P0 Authoritative Ledger Equality Invariant:
+    Verifies that paper_account in SQLite strictly satisfies:
+    1. balance == initial_balance + sum(closed.realized_pnl) - sum(open.fees_paid)
+    2. available_balance == balance - reserved_balance
+    3. reserved_balance == sum(open.entry_price * quantity)
+    """
+    import sqlite3
+    from pathlib import Path
+    db_path = Path(__file__).resolve().parents[2] / "kripto_agent.db"
+    if not db_path.exists():
+        pytest.skip("kripto_agent.db does not exist in repo root")
+
+    conn = sqlite3.connect(str(db_path))
+    c = conn.cursor()
+    c.execute("SELECT initial_balance, balance, available_balance, reserved_balance FROM paper_account WHERE id=1")
+    row = c.fetchone()
+    assert row is not None
+    init_bal, bal, avail, res = row
+
+    c.execute("SELECT sum(realized_pnl) FROM paper_positions WHERE status='CLOSED'")
+    closed_pnl = float(c.fetchone()[0] or 0.0)
+
+    c.execute("SELECT sum(fees_paid), sum(entry_price * quantity), sum(partial_realized_pnl) FROM paper_positions WHERE status='OPEN'")
+    open_fees, open_reserved, open_partial_pnl = c.fetchone()
+    open_fees = float(open_fees or 0.0)
+    open_reserved = float(open_reserved or 0.0)
+    open_partial_pnl = float(open_partial_pnl or 0.0)
+    conn.close()
+
+    expected_bal = round(init_bal + closed_pnl + open_partial_pnl - open_fees, 2)
+    expected_res = round(open_reserved, 2)
+    expected_avail = round(expected_bal - expected_res, 2)
+
+    assert round(bal, 2) == expected_bal, f"Balance drift: DB balance {bal} != expected {expected_bal}"
+    assert round(res, 2) == expected_res, f"Reserved drift: DB reserved {res} != expected {expected_res}"
+    assert round(avail, 2) == expected_avail, f"Available drift: DB available {avail} != expected {expected_avail}"
+

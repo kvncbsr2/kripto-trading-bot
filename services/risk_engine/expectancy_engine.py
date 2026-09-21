@@ -14,6 +14,7 @@ Implements quant expectancy and breakeven formulas:
 from typing import Any, Dict, List, Optional
 from decimal import Decimal, ROUND_HALF_UP
 from shared.logging import get_logger
+from services.risk_engine.position_sizing import calculate_kelly_fraction, calculate_risk_of_ruin
 
 logger = get_logger("expectancy-engine", service="risk_engine")
 
@@ -29,10 +30,14 @@ def _fin_round(val: float, decimals: int = 2) -> float:
 
 class ExpectancyEngine:
     @staticmethod
-    def calculate_from_positions(closed_positions: List[Any]) -> Dict[str, Any]:
+    def calculate_from_positions(
+        closed_positions: List[Any],
+        enforce_circuit_breaker: bool = False,
+    ) -> Dict[str, Any]:
         """
         Calculates authoritative mathematical expectancy and edge metrics
         from a list of closed positions (dictionaries, SQLite rows, or Position objects).
+        When enforce_circuit_breaker is False, trading is unrestricted and should_halt is never True.
         """
         records = []
         for p in closed_positions:
@@ -61,21 +66,26 @@ class ExpectancyEngine:
                 "average_win_usd": 0.0,
                 "average_loss_usd": 0.0,
                 "win_loss_ratio_b": 0.0,
+                "profit_factor": 0.0,
                 "breakeven_win_rate_pct": 50.0,
                 "edge_buffer_pct": 0.0,
                 "expectancy_usd_per_trade": 0.0,
                 "expectancy_r": 0.0,
+                "full_kelly_pct": 0.0,
+                "half_kelly_pct": 0.0,
+                "quarter_kelly_pct": 0.0,
+                "risk_of_ruin_pct": 0.0,
                 "rolling_5_expectancy_usd": 0.0,
                 "is_positive_expectancy": False,
                 "should_halt": False,
                 "status": "INSUFFICIENT_DATA",
                 "status_badge": "BEKLENİYOR",
-                "status_message": "Henüz tamamlanmış işlem bulunmuyor. İlk 5 işlem sonrasında matematiksel devre kesici aktif olacaktır.",
-                "formula_definition": "Expectancy = (WinRate * AvgWin) - (LossRate * AvgLoss) | Başabaş = AvgLoss / (AvgWin + AvgLoss)",
+                "status_message": "Henüz tamamlanmış işlem bulunmuyor. Serbest modda işlemler bekleniyor.",
+                "formula_definition": "Expectancy = (WinRate * AvgWin) - (LossRate * AvgLoss) | Kelly = (p*b - q)/b | RoR = ((1-A)/(1+A))^U",
             }
 
-        wins = [r["realized_pnl"] for r in records if r["realized_pnl"] > 0]
-        losses = [abs(r["realized_pnl"]) for r in records if r["realized_pnl"] <= 0]
+        wins = [float(r["realized_pnl"]) for r in records if float(r.get("realized_pnl") or 0.0) > 0]
+        losses = [abs(float(r["realized_pnl"])) for r in records if float(r.get("realized_pnl") or 0.0) <= 0]
 
         winning_trades = len(wins)
         losing_trades = len(losses)
@@ -114,8 +124,8 @@ class ExpectancyEngine:
 
         # Rolling 5 trades check (for 'her 5-10 işlemde bir yeniden hesaplayın' rule)
         recent_5 = records[-5:] if total_trades >= 5 else records
-        r5_wins = [r["realized_pnl"] for r in recent_5 if r["realized_pnl"] > 0]
-        r5_losses = [abs(r["realized_pnl"]) for r in recent_5 if r["realized_pnl"] <= 0]
+        r5_wins = [float(r["realized_pnl"]) for r in recent_5 if float(r.get("realized_pnl") or 0.0) > 0]
+        r5_losses = [abs(float(r["realized_pnl"])) for r in recent_5 if float(r.get("realized_pnl") or 0.0) <= 0]
         r5_w = len(r5_wins) / len(recent_5)
         r5_l = len(r5_losses) / len(recent_5)
         r5_avg_w = (sum(r5_wins) / len(r5_wins)) if r5_wins else 0.0
@@ -123,18 +133,30 @@ class ExpectancyEngine:
         rolling_5_expectancy = (r5_w * r5_avg_w) - (r5_l * r5_avg_l)
 
         # Rule: 'Expectancy pozitif kaldığı sürece yöndesiniz; negatife dönerse hemen dur.'
-        # Trigger halt only if we have at least 5 closed trades and expectancy is non-positive
-        should_halt = (total_trades >= 5 and expectancy_usd <= 0.0)
+        # Trigger halt only if enforce_circuit_breaker is True, at least 5 closed trades, and non-positive expectancy
+        if enforce_circuit_breaker:
+            should_halt = (total_trades >= 5 and expectancy_usd <= 0.0)
+        else:
+            should_halt = False
 
-        if should_halt:
-            status = "NEGATIVE_EXPECTANCY_HALTED"
-            status_badge = "DURDURMA AKTİF"
+        if total_trades >= 5 and expectancy_usd <= 0.0:
             exp_str = f"-${abs(expectancy_usd):.2f}" if expectancy_usd < 0 else f"${expectancy_usd:.2f}"
-            status_message = (
-                f"🛑 MATEMATİKSEL DEVRE KESİCİ DEVREDE! Beklenen getiri ({exp_str}/işlem) negatife döndü. "
-                f"Kazanma oranı (%{win_rate_pct:.1f}), başabaş eşiğinin (%{breakeven_win_rate_pct:.1f}) altına indi. Sermayeyi korumak için alımlar durduruldu!"
-            )
-            logger.debug(status_message)
+            if enforce_circuit_breaker:
+                status = "NEGATIVE_EXPECTANCY_HALTED"
+                status_badge = "DURDURMA AKTİF"
+                status_message = (
+                    f"🛑 MATEMATİKSEL DEVRE KESİCİ DEVREDE! Beklenen getiri ({exp_str}/işlem) negatife döndü. "
+                    f"Kazanma oranı (%{win_rate_pct:.1f}), başabaş eşiğinin (%{breakeven_win_rate_pct:.1f}) altına indi. Sermayeyi korumak için alımlar durduruldu!"
+                )
+                logger.debug(status_message)
+            else:
+                status = "UNRESTRICTED_TRADING"
+                status_badge = "DEVRE KESİCİ KALDIRILDI"
+                status_message = (
+                    f"⚡ DEVRE KESİCİ KALDIRILDI (SERBEST MOD): Beklenen getiri ({exp_str}/işlem). "
+                    f"Kullanıcı talimatıyla devre kesici kaldırıldı; sistem serbest modda alım-satım ve öğrenmeye kesintisiz devam ediyor."
+                )
+                logger.info(status_message)
         elif is_positive:
             status = "POSITIVE_EDGE"
             status_badge = "YÖNDESİNİZ"
@@ -147,6 +169,12 @@ class ExpectancyEngine:
             status_badge = "İZLENİYOR"
             status_message = f"İşlem sayısı ({total_trades}/5) erken aşamada. Matematiksel model takip ediliyor."
 
+        profit_factor = round(sum(wins) / (sum(losses) + 1e-9), 2) if losses else (999.0 if wins else 0.0)
+        full_kelly = calculate_kelly_fraction(win_rate, win_loss_ratio_b, multiplier=1.0, max_cap=1.0)
+        half_kelly = calculate_kelly_fraction(win_rate, win_loss_ratio_b, multiplier=0.5, max_cap=0.10)
+        quarter_kelly = calculate_kelly_fraction(win_rate, win_loss_ratio_b, multiplier=0.25, max_cap=0.05)
+        ror = calculate_risk_of_ruin(win_rate, win_loss_ratio_b, risk_per_trade=0.02, ruin_drawdown_pct=0.40)
+
         return {
             "sample_size": total_trades,
             "winning_trades": winning_trades,
@@ -156,15 +184,21 @@ class ExpectancyEngine:
             "average_win_usd": _fin_round(avg_win, 2),
             "average_loss_usd": _fin_round(avg_loss, 2),
             "win_loss_ratio_b": _fin_round(win_loss_ratio_b, 2),
+            "profit_factor": profit_factor,
             "breakeven_win_rate_pct": breakeven_win_rate_pct,
             "edge_buffer_pct": edge_buffer_pct,
             "expectancy_usd_per_trade": _fin_round(expectancy_usd, 2),
             "expectancy_r": _fin_round(expectancy_r, 2),
+            "full_kelly_pct": round(full_kelly * 100.0, 2),
+            "half_kelly_pct": round(half_kelly * 100.0, 2),
+            "quarter_kelly_pct": round(quarter_kelly * 100.0, 2),
+            "risk_of_ruin_pct": round(ror * 100.0, 3),
             "rolling_5_expectancy_usd": _fin_round(rolling_5_expectancy, 2),
             "is_positive_expectancy": is_positive,
             "should_halt": should_halt,
             "status": status,
             "status_badge": status_badge,
             "status_message": status_message,
-            "formula_definition": "Expectancy = (WinRate * AvgWin) - (LossRate * AvgLoss) | Başabaş = AvgLoss / (AvgWin + AvgLoss)",
+            "formula_definition": "Expectancy = (WinRate * AvgWin) - (LossRate * AvgLoss) | Kelly = (p*b - q)/b | RoR = ((1-A)/(1+A))^U",
         }
+

@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from typing import Optional
 
@@ -27,7 +28,7 @@ class Settings(BaseSettings):
     EXCHANGE_API_KEY: Optional[str] = None
     EXCHANGE_API_SECRET: Optional[str] = None
     EXCHANGE_TESTNET: bool = False
-    BINANCE_ENV: str = "testnet"  # "testnet" or "production_market_data"
+    BINANCE_ENV: str = "production_market_data"  # "testnet" or "production_market_data"
     BINANCE_API_KEY: str = ""
     BINANCE_API_SECRET: str = ""
     BINANCE_TESTNET: bool = True  # Defaults to Spot Testnet
@@ -53,8 +54,8 @@ class Settings(BaseSettings):
     # API Security & Authentication (Section 27)
     API_KEY_AUTH_ENABLED: bool = True  # Production-safe default
     API_KEY_AUTH_BYPASS_DEV: bool = False
-    API_AUTH_SECRET: str = "kripto_auth_secret_token_v6_production_safe_jwt_2026"
-    API_ADMIN_KEY: str = "kripto_admin_api_key_v6_production_safe_token_2026"
+    API_AUTH_SECRET: str = os.getenv("API_AUTH_SECRET", "kripto-agent-auth-secret-default")
+    API_ADMIN_KEY: str = os.getenv("API_ADMIN_KEY", "kripto-agent-admin-key-default")
 
     # R10 RSI Divergence Configuration
     # REVERTED (2026-09): was loosened to 15m/pivot-3 to chase more signal frequency
@@ -68,10 +69,13 @@ class Settings(BaseSettings):
     R10_PIVOT_LEFT: int = 5
     R10_PIVOT_RIGHT: int = 2
     R10_CONFIRMATION_ENABLED: bool = True
+    R10_MAX_ENTRY_RISK_PCT: float = 0.04  # Max allowable entry distance from stop (4%)
+    R10_MAX_BARS_AFTER_CONFIRMATION: int = 3  # Up to 3 bars post-pivot confirmation for structural bounce
+    MIN_NOTIONAL_USDT: float = 11.0  # Binance Spot minimum notional threshold
 
     # V2 7-Day $5,000 Experiment Configuration
     EXPERIMENT_NAME: str = "7_DAY_5000_PAPER_TEST"
-    INITIAL_CAPITAL: float = 5000.0
+    INITIAL_CAPITAL: float = 10000.0
     BASE_CURRENCY: str = "USDT"
 
     # Risk Management - Original Disciplined Protocol
@@ -81,8 +85,8 @@ class Settings(BaseSettings):
     DAILY_TARGET_MIN: float = 35.0
     DAILY_TARGET_MAX: float = 50.0
     TARGET_MODE: str = "HARD"  # Blocks new entries; existing exits remain active
-    MAX_TRADES_PER_DAY: int = 5
-    MAX_OPEN_POSITIONS: int = 2
+    MAX_TRADES_PER_DAY: int = 10
+    MAX_OPEN_POSITIONS: int = 25
     MAX_POSITION_EQUITY_RATIO: float = 0.20  # Max 20% ($1,000) in single trade
     LEVERAGE: float = 1.0
 
@@ -93,9 +97,8 @@ class Settings(BaseSettings):
     SLIPPAGE_BPS: float = 5.0  # 5 bps
     MAX_SPREAD_BPS: float = 15.0  # Max spread 15 bps
     MIN_24H_VOLUME_USDT: float = 500000.0  # Min $500K 24h volume
-    MAX_UNIVERSE_SYMBOLS: int = 30  # Top 30 highly-liquid Binance pairs (low-memory cloud friendly)
+    MAX_UNIVERSE_SYMBOLS: int = 200  # Top 200 highly-liquid Binance USDT spot pairs
     BINANCE_ENVIRONMENT: str = "production_market_data"
-    BINANCE_ENV: str = "production_market_data"
 
     # Strategy & Signal Tuning
     ATR_SL_MULTIPLIER: float = 1.5
@@ -136,8 +139,6 @@ class Settings(BaseSettings):
     TIMEFRAMES: list[str] = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
     # Telegram
-    TELEGRAM_BOT_TOKEN: Optional[str] = None
-    TELEGRAM_CHAT_ID: Optional[str] = None
     TELEGRAM_NOTIFICATIONS_ENABLED: bool = False
 
     # Bitcoin Trend Shield (Regime Filter)

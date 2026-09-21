@@ -70,7 +70,7 @@ class HeuristicFallbackProvider(BaseLLMProvider):
                 "key_risk": "Volatility expansion around key technical levels.",
                 "synthesis": f"Dialectic debate resolved with {verdict} bias (Confidence: {conf:.2f}).",
             }
-            return json.dumps(data) if json_mode else data["synthesis"]
+            return json.dumps(data) if json_mode else str(data["synthesis"])
 
         if "judge" in system_lower or "judge" in user_lower:
             is_defensive = "streak: -" in user_lower or "drawdown: 5" in user_lower or "drawdown: 6" in user_lower or "drawdown: 7" in user_lower or "drawdown: 8" in user_lower or "pnl: -3" in user_lower or "pnl: -4" in user_lower or "pnl: -5" in user_lower
@@ -106,7 +106,7 @@ class HeuristicFallbackProvider(BaseLLMProvider):
                 "lesson_learned": "Trade closed per recorded control threshold. Maintain disciplined risk rules.",
                 "recommendation": "Preserve risk budget and require secondary confirmation before re-entry.",
             }
-            return json.dumps(data) if json_mode else data["lesson_learned"]
+            return json.dumps(data) if json_mode else str(data["lesson_learned"])
 
         if json_mode:
             return json.dumps({
@@ -221,7 +221,8 @@ def get_llm_provider(
     """
     Factory to return configured LLM provider with graceful fallback.
     """
-    selected_provider = (provider_name or os.getenv("LLM_PROVIDER", "fallback")).lower()
+    raw_provider = provider_name or os.getenv("LLM_PROVIDER") or "fallback"
+    selected_provider = str(raw_provider).lower()
 
     if selected_provider in ("openai", "gpt"):
         key = api_key or os.getenv("OPENAI_API_KEY")

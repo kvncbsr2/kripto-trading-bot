@@ -258,7 +258,14 @@ async def test_live_binance_execution_partial_fill_and_fail_closed():
             "fee": {"cost": 3.0},
         },
         # 2. Protective stop order failure
-        Exception("Binance 400: Filter failure STOP_PRICE_INVALID")
+        Exception("Binance 400: Filter failure STOP_PRICE_INVALID"),
+        # 3. Emergency liquidation response
+        {
+            "id": "112234",
+            "status": "FILLED",
+            "filled": 0.05,
+            "price": 59900.0,
+        },
     ]
 
     # Temporarily set live trading flags for mock engine init

@@ -156,8 +156,10 @@ class BinanceConnector:
             # candle here if it hasn't closed yet, so every consumer downstream only
             # ever sees closed bars.
             tf_seconds = {
-                "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400,
-            }.get(timeframe, 900)
+                "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
+                "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800,
+                "12h": 43200, "1d": 86400, "3d": 259200, "1w": 604800,
+            }.get(str(timeframe).lower(), 900)
             if candles:
                 last = candles[-1]
                 bar_close_time = last.timestamp.timestamp() + tf_seconds
@@ -172,6 +174,20 @@ class BinanceConnector:
             logger.error(f"REST fetch_ohlcv error for {symbol}: {e}")
             return []
 
+    async def sync_symbol_filters(self) -> bool:
+        """Dynamically loads and synchronizes exchange symbol filters (tickSize, stepSize, minNotional)."""
+        try:
+            from services.execution.symbol_filters import symbol_filter_engine
+            logger.info("Fetching dynamic exchange info from Binance REST API...")
+            markets = await asyncio.wait_for(self.rest_client.load_markets(), timeout=15.0)
+            if markets:
+                symbol_filter_engine.load_from_exchange_info(markets)
+                logger.info(f"Successfully synchronized {len(markets)} symbol filters from Binance exchange info.")
+                return True
+        except Exception as e:
+            logger.warning(f"Failed to dynamically fetch exchange info from Binance ({e}). Relying on fallback specs.")
+        return False
+
     async def start(self):
         """Starts real-time multiplexed WebSocket stream loop with jitter and exponential backoff."""
         if self._running:
@@ -183,6 +199,12 @@ class BinanceConnector:
         self._running = True
         reconnect_delay = 2.0
         max_reconnect_delay = 60.0
+
+        # Attempt dynamic symbol filters sync before streaming
+        try:
+            await self.sync_symbol_filters()
+        except Exception as e:
+            logger.warning(f"Initial symbol filters sync error: {e}")
 
         # Construct multiplexed stream paths: e.g. btcusdt@kline_15m / btcusdt@bookTicker
         streams = []
