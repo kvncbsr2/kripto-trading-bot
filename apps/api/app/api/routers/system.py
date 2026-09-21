@@ -66,23 +66,44 @@ async def get_system_state():
         from services.strategy_engine.registry import get_strategy_metadata
         active_strat = get_strategy_metadata(active_strat_id).to_dict()
 
+    from services.config_manager.state_persistence import (
+        load_persisted_profile_state,
+        update_persisted_state,
+    )
+    persisted = load_persisted_profile_state()
+    is_circuit_suspended = persisted.get("circuit_suspended", False)
+    cb = getattr(risk_engine, "circuit_breaker", None)
+    if is_circuit_suspended and cb:
+        cb.is_suspended = True
+
     from services.risk_engine.circuit_breaker import CircuitState
     daily_pnl = snapshot.get("daily_total_pnl", 0.0)
     daily_max_loss = getattr(risk_engine, "daily_max_loss_usd", getattr(settings, "DAILY_MAX_LOSS", 50.0))
 
-    cb = getattr(risk_engine, "circuit_breaker", None)
     if cb and not getattr(cb, "is_suspended", False) and daily_pnl <= -daily_max_loss:
         cb.state = CircuitState.LOCKED
         cb.trip_reason = f"DAILY_RISK_LOCK: Daily loss reached -${abs(daily_pnl):.2f} (limit: -${daily_max_loss:.2f})"
 
     cb_state = getattr(cb.state, "value", str(cb.state)) if (cb and hasattr(cb, "state")) else "NORMAL"
-    is_halted = cb_state in ["LOCKED", "EMERGENCY"] or RUNTIME_STATE.get("is_halted", False)
+    is_halted = cb_state in ["LOCKED", "EMERGENCY"] or persisted.get("is_halted", False) or RUNTIME_STATE.get("is_halted", False)
     system_state = "HALTED" if is_halted else RUNTIME_STATE.get("system_state", "READY")
+
+    # If persisted state marks bot as active, attempt adoption in current worker if not running
+    if persisted.get("is_autonomous_active", False) and not is_halted and not autonomous_trader.is_active:
+        try:
+            autonomous_trader.start()
+        except Exception:
+            pass
+
+    is_auto_active = (autonomous_trader.is_active or persisted.get("is_autonomous_active", False)) and not is_halted
+    last_cycle = autonomous_trader.last_cycle_at or persisted.get("last_cycle_at")
+    last_act = autonomous_trader.last_action or persisted.get("last_action") or "Otonom motor hazır."
 
     # Atomic synchronization of runtime state
     RUNTIME_STATE["circuit_state"] = cb_state
     RUNTIME_STATE["is_halted"] = is_halted
     RUNTIME_STATE["system_state"] = system_state
+    RUNTIME_STATE["is_autonomous_active"] = is_auto_active
 
     return {
         "system": "KRIPTO AGENT V6.1",
@@ -118,9 +139,9 @@ async def get_system_state():
         "circuit_state": cb_state,
         "mode": "PAPER_TRADING",
         "is_spot_mode": True,
-        "is_autonomous_active": autonomous_trader.is_active and not is_halted,
-        "last_cycle_at": autonomous_trader.last_cycle_at,
-        "last_action": autonomous_trader.last_action,
+        "is_autonomous_active": is_auto_active,
+        "last_cycle_at": last_cycle,
+        "last_action": last_act,
         "live_trading_prohibited": True,
         "price_stale": snapshot.get("price_stale", False),
         "stale_price_symbols": snapshot.get("stale_price_symbols", []),
@@ -301,6 +322,14 @@ async def post_emergency_shutdown(
     if hasattr(risk_engine, "circuit_breaker") and risk_engine.circuit_breaker:
         risk_engine.circuit_breaker.state = CircuitState.EMERGENCY
 
+    update_persisted_state({
+        "is_autonomous_active": False,
+        "is_halted": True,
+        "circuit_state": CircuitState.EMERGENCY.value,
+        "circuit_suspended": False,
+        "last_action": autonomous_trader.last_action,
+    })
+
     open_pos_count = len(command_bus.broker.open_positions) if command_bus.broker else 0
     command_bus._log_audit(
         action="EMERGENCY_STOP",
@@ -355,6 +384,13 @@ async def post_system_unhalt(
         if hasattr(risk_engine.circuit_breaker, "resume"):
             risk_engine.circuit_breaker.resume(source="user_unhalt")
         risk_engine.circuit_breaker.reset(baseline_trade_count=len(closed))
+
+    update_persisted_state({
+        "is_halted": False,
+        "circuit_suspended": True if force else False,
+        "circuit_state": "NORMAL",
+        "last_action": autonomous_trader.last_action,
+    })
     command_bus._log_audit("UNHALT_SYSTEM", {"force": force, "baseline_trade_count": len(closed)}, True, {"system_state": "READY", "is_halted": False})
 
     return {
@@ -409,9 +445,23 @@ async def post_start_agent(
             autonomous_trader.last_action = "Otonom motor aktif. Gerçek piyasa taranıyor."
             autonomous_trader._sync_runtime_state()
             RUNTIME_STATE["is_autonomous_active"] = True
+            update_persisted_state({
+                "is_autonomous_active": True,
+                "is_halted": False,
+                "circuit_suspended": True if force else False,
+                "circuit_state": "NORMAL",
+                "last_action": autonomous_trader.last_action,
+            })
             return {"success": True, "status": "STARTED", "system_state": "TRADING", "message": "Otonom ajan aktif edildi."}
         raise
     RUNTIME_STATE["is_autonomous_active"] = True
+    update_persisted_state({
+        "is_autonomous_active": True,
+        "is_halted": False,
+        "circuit_suspended": True if force else False,
+        "circuit_state": "NORMAL",
+        "last_action": autonomous_trader.last_action,
+    })
     command_bus._log_audit("START_AGENT", {"unhalt": unhalt, "force": force, "baseline_trade_count": len(closed)}, True, {"system_state": "TRADING"})
     return {"success": True, "status": "STARTED", "system_state": "TRADING", "message": "Otonom ajan başlatıldı."}
 
@@ -422,6 +472,10 @@ async def post_pause_agent(
 ):
     autonomous_trader.pause()
     RUNTIME_STATE["system_state"] = "PAUSED"
+    update_persisted_state({
+        "is_autonomous_active": False,
+        "last_action": autonomous_trader.last_action,
+    })
     command_bus._log_audit("PAUSE_AGENT", {}, True, {"system_state": "PAUSED"})
     return {"success": True, "status": "PAUSED", "system_state": "PAUSED", "message": "Otonom ajan duraklatıldı."}
 
@@ -434,6 +488,11 @@ async def post_resume_agent(
         return {"success": False, "system_state": RUNTIME_STATE.get("system_state"), "message": "Resume blocked during RISK_LOCK"}
     autonomous_trader.resume()
     RUNTIME_STATE["system_state"] = "TRADING"
+    update_persisted_state({
+        "is_autonomous_active": True,
+        "is_halted": False,
+        "last_action": autonomous_trader.last_action,
+    })
     command_bus._log_audit("RESUME_AGENT", {}, True, {"system_state": "TRADING"})
     return {"success": True, "status": "RESUMED", "system_state": "TRADING", "message": "Otonom ajan devam ettirildi."}
 
@@ -444,6 +503,10 @@ async def post_stop_agent(
 ):
     autonomous_trader.stop()
     RUNTIME_STATE["system_state"] = "STOPPED"
+    update_persisted_state({
+        "is_autonomous_active": False,
+        "last_action": autonomous_trader.last_action,
+    })
     command_bus._log_audit("STOP_AGENT", {}, True, {"system_state": "STOPPED"})
     return {"success": True, "status": "STOPPED", "system_state": "STOPPED", "message": "Otonom ajan durduruldu."}
 

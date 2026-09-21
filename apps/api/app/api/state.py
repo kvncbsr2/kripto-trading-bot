@@ -135,7 +135,10 @@ try:
         port_state = paper_broker.get_portfolio_state()
         daily_pnl = getattr(port_state, "daily_pnl", 0.0)
         max_loss = getattr(risk_engine, "daily_max_loss_usd", 50.0)
-        if daily_pnl <= -max_loss:
+        if persisted.get("circuit_suspended", False):
+            risk_engine.circuit_breaker.is_suspended = True
+            logger.info("Circuit breaker suspension restored from persisted state.")
+        elif daily_pnl <= -max_loss:
             from services.risk_engine.circuit_breaker import CircuitState
             risk_engine.circuit_breaker.state = CircuitState.LOCKED
             risk_engine.circuit_breaker.trip_reason = f"DAILY_RISK_LOCK: Daily loss reached -${abs(daily_pnl):.2f} (limit: -${max_loss:.2f})"
@@ -143,6 +146,9 @@ try:
             RUNTIME_STATE["is_halted"] = True
             RUNTIME_STATE["system_state"] = "HALTED"
             logger.critical(f"STARTUP CIRCUIT BREAKER LOCKED: Daily loss limit breached on startup (${daily_pnl:.2f} <= -${max_loss:.2f}). System is HALTED.")
+
+        if persisted.get("is_autonomous_active", False) and not RUNTIME_STATE.get("is_halted", False):
+            RUNTIME_STATE["is_autonomous_active"] = True
 except Exception as e:
     logger.critical(f"FATAL: Failed to apply initial Risk Profile or Strategy on startup: {e}")
     raise RuntimeError(f"Cannot initialize system risk profile or strategy on startup: {e}") from e

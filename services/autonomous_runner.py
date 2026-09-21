@@ -171,6 +171,18 @@ class AutonomousPaperTrader:
         _ACTIVE_RUNNER_INSTANCE = self
         self._sync_runtime_state()
 
+        try:
+            from services.config_manager.state_persistence import update_persisted_state
+            update_persisted_state({
+                "is_autonomous_active": True,
+                "is_halted": False,
+                "circuit_suspended": True,
+                "circuit_state": "NORMAL",
+                "last_action": self.last_action,
+            })
+        except Exception as e:
+            logger.debug(f"Failed to persist active runner state: {e}")
+
         add_system_log("▶️ OTONOM BOT BAŞLATILDI: Canlı Binance Spot kline/fiyat taraması aktif.", level="SUCCESS", service="runner")
         try:
             asyncio.get_running_loop().create_task(
@@ -201,6 +213,15 @@ class AutonomousPaperTrader:
         self.worker_state = TradingWorkerState.STOPPED
         self._sync_runtime_state()
 
+        try:
+            from services.config_manager.state_persistence import update_persisted_state
+            update_persisted_state({
+                "is_autonomous_active": False,
+                "last_action": self.last_action,
+            })
+        except Exception:
+            pass
+
         add_system_log("⏹️ OTONOM BOT DURDURULDU: Alım-satım taraması duraklatıldı.", level="WARNING", service="runner")
         try:
             asyncio.get_running_loop().create_task(telegram_service.notify_bot_stopped())
@@ -218,6 +239,14 @@ class AutonomousPaperTrader:
         self.is_active = False
         self.last_action = "Otonom motor duraklatıldı (PAUSED)."
         self._sync_runtime_state()
+        try:
+            from services.config_manager.state_persistence import update_persisted_state
+            update_persisted_state({
+                "is_autonomous_active": False,
+                "last_action": self.last_action,
+            })
+        except Exception:
+            pass
         add_system_log("⏸️ OTONOM BOT DURAKLATILDI (PAUSED).", level="INFO", service="runner")
 
     def resume(self):
@@ -229,6 +258,15 @@ class AutonomousPaperTrader:
         self.is_active = True
         self.last_action = "Otonom motor devam ettirildi (RUNNING)."
         self._sync_runtime_state()
+        try:
+            from services.config_manager.state_persistence import update_persisted_state
+            update_persisted_state({
+                "is_autonomous_active": True,
+                "is_halted": False,
+                "last_action": self.last_action,
+            })
+        except Exception:
+            pass
         add_system_log("▶️ OTONOM BOT DEVAM ETTİRİLDİ (RUNNING).", level="SUCCESS", service="runner")
 
     def emergency_stop(self, reason: str = "Acil durum emri verildi."):
@@ -254,6 +292,16 @@ class AutonomousPaperTrader:
                 else:
                     asyncio.run(res)
         self._sync_runtime_state()
+        try:
+            from services.config_manager.state_persistence import update_persisted_state
+            update_persisted_state({
+                "is_autonomous_active": False,
+                "is_halted": True,
+                "circuit_state": "EMERGENCY",
+                "last_action": self.last_action,
+            })
+        except Exception:
+            pass
         add_system_log(f"🚨 ACİL DURDURMA TETİKLENDİ: {reason}", level="ERROR", service="risk")
 
     def reset_state(self):
@@ -267,6 +315,15 @@ class AutonomousPaperTrader:
         self.is_active = False
         self.last_action = "Otonom motor sıfırlandı ve hazır (STOPPED)."
         self._sync_runtime_state()
+        try:
+            from services.config_manager.state_persistence import update_persisted_state
+            update_persisted_state({
+                "is_halted": False,
+                "circuit_state": "NORMAL",
+                "last_action": self.last_action,
+            })
+        except Exception:
+            pass
 
     @classmethod
     def _acquire_worker_lock(cls) -> str:
@@ -311,13 +368,19 @@ class AutonomousPaperTrader:
                 pass
             return token
 
-        if existing_pid > 0 and _is_pid_alive(existing_pid):
+        lock_age = 0.0
+        try:
+            lock_age = time.time() - float(data.get("timestamp", time.time()))
+        except Exception:
+            pass
+
+        if existing_pid > 0 and _is_pid_alive(existing_pid) and lock_age < 180.0:
             raise RuntimeError(
                 f"Only one trading loop can run at a time: another loop is already active in process PID {existing_pid}."
             )
 
-        # Stale lock from deceased process -> clean and retry
-        logger.warning(f"Removing stale worker lock from deceased PID {existing_pid}")
+        # Stale lock from deceased process or expired lock -> clean and retry
+        logger.warning(f"Removing stale worker lock from deceased or expired PID {existing_pid} (age: {lock_age:.1f}s)")
         try:
             _LOCK_FILE.unlink(missing_ok=True)
         except Exception:
@@ -402,8 +465,8 @@ class AutonomousPaperTrader:
                 # Dynamic responsiveness invariant:
                 # If there are open positions, sleep briefly (max 4.0s) so stops/targets are monitored in real-time.
                 # Candle-boundary and timestamp deduplication prevent redundant universe scans.
-                # If no open positions exist, sleep the full duration until the next bar closes.
-                actual_sleep = min(sleep_sec, 4.0) if has_open_positions else sleep_sec
+                # When no open positions exist, bound sleep to max 30s to keep heartbeat and process active.
+                actual_sleep = min(sleep_sec, 4.0) if has_open_positions else min(sleep_sec, float(self.cycle_interval), 30.0)
                 await asyncio.sleep(actual_sleep)
             except asyncio.CancelledError:
                 break
@@ -414,6 +477,14 @@ class AutonomousPaperTrader:
     async def step_cycle(self) -> Dict[str, Any]:
         self.cycle_count += 1
         self.last_cycle_at = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        try:
+            from services.config_manager.state_persistence import update_persisted_state
+            update_persisted_state({
+                "last_cycle_at": self.last_cycle_at,
+                "last_action": self.last_action,
+            })
+        except Exception:
+            pass
 
         if not self.command_bus or not getattr(self.command_bus, "broker", None):
             self.last_action = "CommandBus veya Broker hazır değil."

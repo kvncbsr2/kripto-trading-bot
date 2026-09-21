@@ -1,7 +1,14 @@
 {
   "active_risk_profile_level": 1,
-  "active_strategy_id": "momentum_dip_rebound",
-  "updated_at": "2026-09-21T15:43:11.018135+00:00",
+  "active_strategy_id": "r10_rsi_divergence",
+  "max_open_positions_override": null,
+  "is_autonomous_active": false,
+  "circuit_suspended": false,
+  "is_halted": false,
+  "circuit_state": "NORMAL",
+  "last_action": "Otonom motor beklemede (STOPPED).",
+  "last_cycle_at": "21:36:38",
+  "updated_at": "2026-09-21T21:36:39.005636+00:00",
   "version": "2.0.0",
   "source": "bandit_contextual"
 }
