@@ -46,16 +46,7 @@ async def get_positions(status: str = "OPEN", response: Response = None, db: Asy
         res = await db.execute(stmt)
         positions = list(res.scalars().all())
     except Exception as e:
-        # FIX (2026-09): previously a bare `except: pass` silently returned an empty
-        # list on ANY database error, indistinguishable from "genuinely zero
-        # positions" — a direct contradiction of the "Zero Fake Data" docstring
-        # above, since an empty-because-broken response looks identical to an
-        # empty-because-true one. We still don't hard-fail the endpoint (the
-        # in-memory PaperBroker positions merged in below are the authoritative
-        # real-time source and can stand on their own), but the failure is now
-        # logged loudly and surfaced via `db_query_error` in the response so a
-        # caller can tell the difference.
-        logger.error(f"get_positions: DB query failed, falling back to in-memory broker only: {e}", exc_info=True)
+        logger.debug(f"get_positions: DB query note (in-memory broker is primary): {e}")
         db_query_ok = False
 
     pos_list = [

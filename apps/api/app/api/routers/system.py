@@ -1027,7 +1027,26 @@ async def post_sync_git(_role: Role = Depends(verify_api_key_or_token)):
 
         results["download_size_bytes"] = len(zip_bytes)
         results["updated_files"] = updated_files_count
-        results["skipped_protected_files"] = skipped_files_count
+        # Ensure SQLite is in DELETE journal mode and clean up any lock-prone shm/wal files
+        try:
+            import sqlite3
+            db_path = os.path.join(project_root, "kripto_agent.db")
+            if os.path.exists(db_path):
+                conn = sqlite3.connect(db_path, timeout=10.0)
+                conn.execute("PRAGMA journal_mode=DELETE;")
+                conn.execute("PRAGMA synchronous=NORMAL;")
+                conn.execute("PRAGMA busy_timeout=30000;")
+                conn.close()
+            # Clean up orphaned shm/wal files that cause disk I/O errors on cPanel
+            for ext in ("-shm", "-wal"):
+                orphan = db_path + ext
+                if os.path.exists(orphan):
+                    try:
+                        os.remove(orphan)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
         # Trigger Passenger reload via tmp/restart.txt
         tmp_dir = os.path.join(project_root, "tmp")
