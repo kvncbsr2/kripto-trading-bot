@@ -968,45 +968,66 @@ async def get_recent_decisions(limit: int = 50):
 async def post_sync_git(_role: Role = Depends(verify_api_key_or_token)):
     """
     Pulls latest commits from GitHub repository (origin/main)
-    and touches tmp/restart.txt to automatically trigger Passenger reload.
+    using zero-fork pure-Python download & extraction,
+    then touches tmp/restart.txt to automatically trigger Passenger reload.
+    Eliminates all 'cannot fork() for remote-https' shared hosting failures.
     """
-    import subprocess
+    import io
     import os
+    import urllib.request
+    import zipfile
+    from datetime import datetime, timezone
 
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     results = {}
 
     try:
-        # Ensure Git repo is initialized
-        git_dir = os.path.join(project_root, ".git")
-        repo_url = "https://github.com/kvncbsr2/kripto-trading-bot.git"
-        if not os.path.exists(git_dir):
-            subprocess.run(["git", "init"], cwd=project_root, check=True, capture_output=True)
-            subprocess.run(["git", "remote", "add", "origin", repo_url], cwd=project_root, check=True, capture_output=True)
+        # Download repository zip archive from GitHub without spawning subprocesses
+        zip_url = "https://github.com/kvncbsr2/kripto-trading-bot/archive/refs/heads/main.zip"
+        req = urllib.request.Request(zip_url, headers={"User-Agent": "KRIPTO-AGENT-SYNC/1.0"})
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"GitHub ZIP indirilemedi (HTTP {resp.status})")
+            zip_bytes = resp.read()
 
-        # Run git pull or git reset to sync with main branch
-        pull_proc = subprocess.run(
-            ["git", "fetch", "origin", "main"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if pull_proc.returncode == 0:
-            reset_proc = subprocess.run(
-                ["git", "reset", "--hard", "origin/main"],
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            pull_proc = reset_proc
+        updated_files_count = 0
+        skipped_files_count = 0
 
-        results["git_sync"] = {
-            "returncode": pull_proc.returncode,
-            "stdout": pull_proc.stdout.strip(),
-            "stderr": pull_proc.stderr.strip(),
+        # Safe extraction: Never overwrite database, env secrets, or git config
+        PROTECTED_PATHS = {
+            "kripto_agent.db",
+            "kripto_agent_denetim_salt_okunur.db",
+            ".env",
+            "passenger_wsgi.py",
         }
+
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+            for member in z.infolist():
+                parts = member.filename.split("/", 1)
+                if len(parts) < 2 or not parts[1]:
+                    continue
+                rel_path = parts[1]
+
+                # Security guards
+                if rel_path in PROTECTED_PATHS or rel_path.startswith((".git/", "tmp/")):
+                    skipped_files_count += 1
+                    continue
+                if rel_path.endswith((".db", ".sqlite", ".sqlite3")):
+                    skipped_files_count += 1
+                    continue
+
+                dest_path = os.path.join(project_root, rel_path)
+                if member.is_dir():
+                    os.makedirs(dest_path, exist_ok=True)
+                else:
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    with z.open(member) as src, open(dest_path, "wb") as dst:
+                        dst.write(src.read())
+                    updated_files_count += 1
+
+        results["download_size_bytes"] = len(zip_bytes)
+        results["updated_files"] = updated_files_count
+        results["skipped_protected_files"] = skipped_files_count
 
         # Trigger Passenger reload via tmp/restart.txt
         tmp_dir = os.path.join(project_root, "tmp")
@@ -1017,15 +1038,17 @@ async def post_sync_git(_role: Role = Depends(verify_api_key_or_token)):
 
         results["restart_triggered"] = True
         return {
-            "success": pull_proc.returncode == 0,
-            "message": "GitHub senkronizasyonu tamamlandı ve sistem yeniden başlatılıyor." if pull_proc.returncode == 0 else f"Git çekme hatası: {pull_proc.stderr.strip()}",
+            "success": True,
+            "message": f"GitHub'dan en son kodlar başarıyla çekildi ({updated_files_count} dosya güncellendi) ve sistem yeniden başlatılıyor.",
             "details": results,
         }
     except Exception as e:
         return {
             "success": False,
             "message": f"Senkronizasyon hatası: {str(e)}",
+            "details": {"error": str(e)},
         }
+
 
 
 
