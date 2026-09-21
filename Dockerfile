@@ -14,15 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency definitions
-COPY pyproject.toml .
+# Copy application source code (filtered by .dockerignore)
+COPY . .
 
-# Install dependencies
+# Install dependencies and application
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
-
-# Copy application source code
-COPY . .
 
 # Expose API port
 EXPOSE 8000
