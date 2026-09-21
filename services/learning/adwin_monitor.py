@@ -14,7 +14,11 @@ INVARIANTS & SAFETY:
 import sqlite3
 import datetime
 from typing import Dict, Any, List, Optional, Tuple
-from river.drift import ADWIN
+
+try:
+    from river.drift import ADWIN
+except ImportError:
+    ADWIN = None
 
 from shared.logging import get_logger
 

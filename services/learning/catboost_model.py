@@ -13,7 +13,12 @@ import json
 import logging
 from typing import Dict, Any, List, Tuple, Optional
 import numpy as np
-from catboost import CatBoostClassifier
+
+try:
+    from catboost import CatBoostClassifier
+except ImportError:
+    CatBoostClassifier = None
+
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score, brier_score_loss
 
 from services.learning.calibrator import ProbabilityCalibrator
